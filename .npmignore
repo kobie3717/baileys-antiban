@@ -1,0 +1,6 @@
+src/
+test.ts
+bot.ts
+tsconfig.json
+.git/
+node_modules/

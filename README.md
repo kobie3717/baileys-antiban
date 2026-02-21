@@ -167,6 +167,102 @@ The rate limiter mimics human behavior:
 - **Identical message detection**: Blocks sending the same text more than 3 times
 - **Time-of-day awareness**: Built-in support for custom schedules
 
+## Message Queue
+
+Queue messages for safe, paced delivery with auto-retry:
+
+```typescript
+import { MessageQueue } from 'baileys-antiban';
+
+const queue = new MessageQueue({ maxAttempts: 3 });
+queue.setSendFunction(async (jid, content) => {
+  await safeSock.sendMessage(jid, content);
+});
+
+// Queue messages
+queue.add('group@g.us', { text: 'Hello!' });
+queue.add('group@g.us', { text: 'Important!' }, { priority: 'high' });
+queue.addBulk(['user1@s.whatsapp.net', 'user2@s.whatsapp.net'], { text: 'Broadcast' });
+
+// Start processing
+queue.start();
+
+// Events
+queue.on('sent', (msg) => console.log('Sent:', msg.id));
+queue.on('failed', (msg, err) => console.log('Failed:', msg.id, err));
+queue.on('retry', (msg, attempt, delay) => console.log(`Retry #${attempt} in ${delay}ms`));
+```
+
+## Content Variator
+
+Auto-vary messages to avoid identical message detection:
+
+```typescript
+import { ContentVariator } from 'baileys-antiban';
+
+const variator = new ContentVariator({
+  zeroWidthChars: true,    // Invisible character variations
+  punctuationVariation: true, // Subtle punctuation changes
+  synonyms: true,           // Replace common words with synonyms
+});
+
+// Each call returns a unique variation
+const msg1 = variator.vary('Check out our auction today!');
+const msg2 = variator.vary('Check out our auction today!');
+// msg1 !== msg2 (technically different, looks the same to humans)
+
+// Generate bulk variations for broadcast
+const variations = variator.varyBulk('Hello everyone!', 50);
+```
+
+## Smart Scheduler
+
+Send during safe hours with realistic daily patterns:
+
+```typescript
+import { Scheduler } from 'baileys-antiban';
+
+const scheduler = new Scheduler({
+  timezone: 'Africa/Johannesburg',
+  activeHours: [8, 21],     // 8 AM to 9 PM
+  weekendFactor: 0.5,       // Half speed on weekends
+  peakHours: [10, 14],      // Faster during business hours
+  lunchBreak: [12, 13],     // Slow down at lunch
+});
+
+if (scheduler.isActiveTime()) {
+  const adjustedDelay = scheduler.adjustDelay(baseDelay);
+  // Send with adjusted timing
+} else {
+  console.log(`Next active in ${scheduler.msUntilActive()}ms`);
+}
+```
+
+## Webhook Alerts
+
+Get notified when risk level changes:
+
+```typescript
+import { WebhookAlerts } from 'baileys-antiban';
+
+const alerts = new WebhookAlerts({
+  // Telegram alerts
+  telegram: { botToken: 'BOT_TOKEN', chatId: 'CHAT_ID' },
+  // Discord alerts
+  discord: { webhookUrl: 'https://discord.com/api/webhooks/...' },
+  // Generic webhooks
+  urls: ['https://your-server.com/webhook'],
+  minRiskLevel: 'medium',
+});
+
+// Wire into health monitor
+const antiban = new AntiBan({
+  health: {
+    onRiskChange: (status) => alerts.alert(status),
+  },
+});
+```
+
 ## Emergency Controls
 
 ```typescript
