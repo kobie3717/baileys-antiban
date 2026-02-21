@@ -1,0 +1,32 @@
+{
+  "name": "baileys-antiban",
+  "version": "1.0.0",
+  "description": "Anti-ban middleware for Baileys — human-like messaging patterns to protect your WhatsApp number",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "keywords": [
+    "baileys",
+    "whatsapp",
+    "anti-ban",
+    "rate-limit",
+    "middleware"
+  ],
+  "author": "Kobus Wentzel <kobie@pop.co.za>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kobie3717/baileys-antiban"
+  },
+  "peerDependencies": {
+    "baileys": ">=6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
