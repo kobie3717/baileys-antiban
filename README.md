@@ -1,6 +1,12 @@
 # baileys-antiban 🛡️
 
+[![npm version](https://img.shields.io/npm/v/baileys-antiban.svg)](https://www.npmjs.com/package/baileys-antiban)
+[![GitHub stars](https://img.shields.io/github/stars/kobie3717/baileys-antiban.svg)](https://github.com/kobie3717/baileys-antiban/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Anti-ban middleware for [Baileys](https://github.com/WhiskeySockets/Baileys) — protect your WhatsApp number with human-like messaging patterns.
+
+> **💡 Looking for a complete WhatsApp session management solution?** Check out [WaSP (WhatsApp Session Protocol)](https://github.com/kobie3717/wasp) — a full-featured protocol layer that includes baileys-antiban's core plus session management, multi-provider support, and production-grade reliability features.
 
 ## Why?
 
