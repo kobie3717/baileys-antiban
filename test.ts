@@ -6,6 +6,7 @@ import { AntiBan } from './src/antiban.js';
 import { RateLimiter } from './src/rateLimiter.js';
 import { WarmUp } from './src/warmup.js';
 import { HealthMonitor } from './src/health.js';
+import { TimelockGuard } from './src/timelockGuard.js';
 
 let passed = 0;
 let failed = 0;
@@ -157,6 +158,162 @@ async function testAntiBan() {
   assert(state !== null, 'Can export warm-up state');
 }
 
+async function testTimelockGuard() {
+  console.log('\n🔒 Timelock Guard');
+
+  // Test 1: Initial state — not timelocked
+  const tg = new TimelockGuard();
+  assert(!tg.isTimelocked(), 'Initial state: not timelocked');
+
+  // Test 2: record463Error() activates timelock with 60s default expiry
+  tg.record463Error();
+  assert(tg.isTimelocked(), '463 error activates timelock');
+  const state1 = tg.getState();
+  assert(state1.isActive, 'State shows active');
+  assert(state1.errorCount === 1, `Error count is 1 (got ${state1.errorCount})`);
+  assert(state1.expiresAt !== undefined, 'Expiry date is set');
+
+  // Test 3: canSend() blocks new contacts when timelocked
+  const result1 = tg.canSend('new-contact@s.whatsapp.net');
+  assert(!result1.allowed, 'New contact blocked when timelocked');
+  assert(result1.reason?.includes('timelocked'), `Reason mentions timelock: ${result1.reason}`);
+
+  // Test 4: canSend() allows known chats when timelocked
+  tg.registerKnownChat('known-user@s.whatsapp.net');
+  const result2 = tg.canSend('known-user@s.whatsapp.net');
+  assert(result2.allowed, 'Known chat allowed when timelocked');
+
+  // Test 5: canSend() allows group JIDs (@g.us) when timelocked
+  const result3 = tg.canSend('123456789@g.us');
+  assert(result3.allowed, 'Group chat allowed when timelocked');
+
+  // Test 6: canSend() allows newsletter JIDs (@newsletter) when timelocked
+  const result4 = tg.canSend('newsletter123@newsletter');
+  assert(result4.allowed, 'Newsletter allowed when timelocked');
+
+  // Test 7: registerKnownChat() then canSend() allows that JID
+  tg.registerKnownChat('another-known@s.whatsapp.net');
+  const result5 = tg.canSend('another-known@s.whatsapp.net');
+  assert(result5.allowed, 'Newly registered chat allowed');
+
+  // Test 8: lift() deactivates timelock
+  tg.lift();
+  assert(!tg.isTimelocked(), 'Timelock lifted manually');
+  const result6 = tg.canSend('new-contact-2@s.whatsapp.net');
+  assert(result6.allowed, 'New contact allowed after lift');
+
+  // Test 9: onTimelockUpdate() with isActive=true activates
+  const tg2 = new TimelockGuard();
+  tg2.onTimelockUpdate({
+    isActive: true,
+    enforcementType: 'reachout',
+    timeEnforcementEnds: new Date(Date.now() + 120000),
+  });
+  assert(tg2.isTimelocked(), 'onTimelockUpdate activates timelock');
+
+  // Test 10: onTimelockUpdate() with isActive=false deactivates
+  tg2.onTimelockUpdate({ isActive: false });
+  assert(!tg2.isTimelocked(), 'onTimelockUpdate deactivates timelock');
+
+  // Test 11: onTimelockDetected callback fires
+  let detectedCalled = false;
+  const tg3 = new TimelockGuard({
+    onTimelockDetected: (state) => {
+      detectedCalled = true;
+      assert(state.isActive, 'Callback receives active state');
+    },
+  });
+  tg3.record463Error();
+  assert(detectedCalled, 'onTimelockDetected callback fired');
+
+  // Test 12: onTimelockLifted callback fires
+  let liftedCalled = false;
+  const tg4 = new TimelockGuard({
+    onTimelockLifted: (state) => {
+      liftedCalled = true;
+      assert(!state.isActive, 'Callback receives inactive state');
+    },
+  });
+  tg4.record463Error();
+  tg4.lift();
+  assert(liftedCalled, 'onTimelockLifted callback fired');
+
+  // Test 13: reset() clears everything
+  const tg5 = new TimelockGuard();
+  tg5.record463Error();
+  tg5.registerKnownChat('user@s.whatsapp.net');
+  tg5.reset();
+  assert(!tg5.isTimelocked(), 'Reset clears timelock');
+  assert(tg5.getKnownChats().size === 0, 'Reset clears known chats');
+
+  // Test 14: Expired timelock auto-lifts on canSend() check
+  const tg6 = new TimelockGuard({ resumeBufferMs: 0 });
+  tg6.onTimelockUpdate({
+    isActive: true,
+    timeEnforcementEnds: new Date(Date.now() - 1000), // Expired 1s ago
+  });
+  const result7 = tg6.canSend('new-contact@s.whatsapp.net');
+  assert(result7.allowed, 'Expired timelock auto-lifts on canSend check');
+  assert(!tg6.isTimelocked(), 'Timelock state updated after auto-lift');
+}
+
+function testTimelockHealth() {
+  console.log('\n🏥 Timelock + Health');
+
+  const hm = new HealthMonitor();
+
+  // Test 1: recordReachoutTimelock() increases score by 25
+  hm.recordReachoutTimelock('reachout');
+  const status1 = hm.getStatus();
+  assert(status1.score >= 25, `Timelock error increases score (${status1.score})`);
+  assert(status1.stats.timelockErrors === 1, `timelockErrors stat is 1 (got ${status1.stats.timelockErrors})`);
+
+  // Test 2: Multiple 463 errors are tracked (score is fixed at 25, but count increases)
+  hm.recordReachoutTimelock('reachout');
+  hm.recordReachoutTimelock('reachout');
+  const status2 = hm.getStatus();
+  assert(status2.stats.timelockErrors === 3, `Multiple timelocks tracked (${status2.stats.timelockErrors})`);
+  assert(status2.score === 25, `Score is fixed at 25 for timelock (${status2.score})`);
+  assert(status2.reasons.some(r => r.includes('3 reachout')), 'Reason mentions count');
+}
+
+async function testTimelockAntiBan() {
+  console.log('\n🛡️ Timelock + AntiBan');
+
+  const ab = new AntiBan({
+    rateLimiter: { minDelayMs: 10, maxDelayMs: 20 },
+    warmUp: { warmUpDays: 0 },
+    logging: false,
+  });
+
+  // Activate timelock
+  ab.timelock.record463Error();
+
+  // Test 1: New contact blocked when timelocked
+  const result1 = await ab.beforeSend('new-contact@s.whatsapp.net', 'hello');
+  assert(!result1.allowed, 'AntiBan blocks new contact when timelocked');
+  assert(result1.reason?.includes('timelock'), `Reason mentions timelock: ${result1.reason}`);
+
+  // Test 2: Known chat allowed when timelocked
+  ab.timelock.registerKnownChat('known-user@s.whatsapp.net');
+  const result2 = await ab.beforeSend('known-user@s.whatsapp.net', 'hello');
+  assert(result2.allowed, 'AntiBan allows known chat when timelocked');
+  assert(result2.delayMs >= 0, `Delay applied: ${result2.delayMs}ms`);
+
+  // Test 3: Group allowed when timelocked
+  const result3 = await ab.beforeSend('123456789@g.us', 'hello group');
+  assert(result3.allowed, 'AntiBan allows group when timelocked');
+
+  // Test 4: antiban.timelock getter works
+  assert(ab.timelock.isTimelocked(), 'AntiBan.timelock getter works');
+  ab.timelock.lift();
+  assert(!ab.timelock.isTimelocked(), 'Can lift via getter');
+
+  // Test 5: After lift, new contacts allowed
+  const result4 = await ab.beforeSend('another-new@s.whatsapp.net', 'hello');
+  assert(result4.allowed, 'New contact allowed after timelock lifted');
+}
+
 // Run all tests
 console.log('🧪 baileys-antiban test suite\n');
 
@@ -164,6 +321,9 @@ await testRateLimiter();
 testWarmUp();
 testHealthMonitor();
 await testAntiBan();
+await testTimelockGuard();
+testTimelockHealth();
+await testTimelockAntiBan();
 
 console.log(`\n${'='.repeat(40)}`);
 console.log(`✅ Passed: ${passed}`);
