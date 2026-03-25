@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/baileys-antiban.svg)](https://www.npmjs.com/package/baileys-antiban)
 [![GitHub stars](https://img.shields.io/github/stars/kobie3717/baileys-antiban.svg)](https://github.com/kobie3717/baileys-antiban/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/Y2jCXNGgE)
 
 Anti-ban middleware for [Baileys](https://github.com/WhiskeySockets/Baileys) — protect your WhatsApp number with human-like messaging patterns.
 
@@ -291,6 +292,12 @@ antiban.reset();
 5. **Persist warm-up state** — Don't lose progress on restart
 6. **Monitor your stats** — Check `getStats()` regularly
 7. **Have a backup number** — Bans happen despite best efforts
+
+## Community
+
+Join our Discord community for support, discussions, and updates:
+
+- **Discord:** [https://discord.gg/Y2jCXNGgE](https://discord.gg/Y2jCXNGgE)
 
 ## License
 
