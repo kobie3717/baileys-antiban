@@ -48,6 +48,35 @@ export function wrapSocket(
     if (update.connection === 'open') {
       antiban.onReconnect();
     }
+    // Reachout timelock detection
+    if (update.reachoutTimeLock) {
+      antiban.timelock.onTimelockUpdate({
+        isActive: update.reachoutTimeLock.isActive,
+        timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
+        enforcementType: update.reachoutTimeLock.enforcementType,
+      });
+    }
+  });
+
+  // Catch 463 errors from message updates
+  sock.ev.on('messages.update', (updates: any[]) => {
+    for (const update of updates) {
+      if (update?.update?.messageStubParameters) {
+        const params = update.update.messageStubParameters;
+        if (params.includes(463) || params.includes('463')) {
+          antiban.timelock.record463Error();
+        }
+      }
+    }
+  });
+
+  // Register known chats from incoming messages
+  sock.ev.on('messages.upsert', ({ messages }: any) => {
+    for (const msg of messages || []) {
+      if (msg.key?.remoteJid) {
+        antiban.timelock.registerKnownChat(msg.key.remoteJid);
+      }
+    }
   });
 
   // Create proxy that intercepts sendMessage
@@ -72,6 +101,7 @@ export function wrapSocket(
     try {
       const result = await originalSendMessage(jid, content, options);
       antiban.afterSend(jid, text);
+      antiban.timelock.registerKnownChat(jid);
       return result;
     } catch (error) {
       antiban.afterSendFailed(error instanceof Error ? error.message : String(error));

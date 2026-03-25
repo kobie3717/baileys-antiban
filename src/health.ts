@@ -24,6 +24,7 @@ export interface HealthStatus {
     disconnectsLastHour: number;
     failedMessagesLastHour: number;
     forbiddenErrors: number;
+    timelockErrors: number;
     uptimeMs: number;
     lastDisconnectReason?: string;
   };
@@ -50,7 +51,7 @@ const DEFAULT_CONFIG: HealthMonitorConfig = {
 };
 
 interface Event {
-  type: 'disconnect' | 'forbidden' | 'loggedOut' | 'messageFailed' | 'reconnect';
+  type: 'disconnect' | 'forbidden' | 'loggedOut' | 'messageFailed' | 'reconnect' | 'reachoutTimelocked';
   timestamp: number;
   detail?: string;
 }
@@ -110,6 +111,14 @@ export class HealthMonitor {
   }
 
   /**
+   * Record a 463 reachout timelock error
+   */
+  recordReachoutTimelock(detail?: string): void {
+    this.events.push({ type: 'reachoutTimelocked', timestamp: Date.now(), detail });
+    this.checkAndNotify();
+  }
+
+  /**
    * Get current health status
    */
   getStatus(): HealthStatus {
@@ -135,6 +144,13 @@ export class HealthMonitor {
     if (loggedOut > 0) {
       score += 60;
       reasons.push('Logged out by WhatsApp — possible temporary ban');
+    }
+
+    // Reachout timelocked (463)
+    const timelocked = hourEvents.filter(e => e.type === 'reachoutTimelocked').length;
+    if (timelocked > 0) {
+      score += 25;
+      reasons.push(`${timelocked} reachout timelock (463) error${timelocked > 1 ? 's' : ''} in last hour`);
     }
 
     // Frequent disconnects
@@ -189,6 +205,7 @@ export class HealthMonitor {
         disconnectsLastHour: disconnects,
         failedMessagesLastHour: failedMessages,
         forbiddenErrors: forbidden,
+        timelockErrors: timelocked,
         uptimeMs: now - this.startTime,
         lastDisconnectReason: lastDisconnect?.detail,
       },

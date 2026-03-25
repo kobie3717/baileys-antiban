@@ -17,11 +17,13 @@
 import { RateLimiter, type RateLimiterConfig } from './rateLimiter.js';
 import { WarmUp, type WarmUpConfig, type WarmUpState } from './warmup.js';
 import { HealthMonitor, type HealthMonitorConfig, type HealthStatus } from './health.js';
+import { TimelockGuard, type TimelockGuardConfig, type TimelockState } from './timelockGuard.js';
 
 export interface AntiBanConfig {
   rateLimiter?: Partial<RateLimiterConfig>;
   warmUp?: Partial<WarmUpConfig>;
   health?: Partial<HealthMonitorConfig>;
+  timelock?: Partial<TimelockGuardConfig>;
   /** Log warnings and blocks to console (default: true) */
   logging?: boolean;
 }
@@ -47,6 +49,7 @@ export class AntiBan {
   private rateLimiter: RateLimiter;
   private warmUp: WarmUp;
   private health: HealthMonitor;
+  private timelockGuard: TimelockGuard;
   private logging: boolean;
   
   private stats = {
@@ -71,6 +74,22 @@ export class AntiBan {
       },
     });
     this.logging = config.logging ?? true;
+    this.timelockGuard = new TimelockGuard({
+      ...config.timelock,
+      onTimelockDetected: (state) => {
+        this.health.recordReachoutTimelock(state.enforcementType);
+        if (this.logging) {
+          console.log(`[baileys-antiban] REACHOUT TIMELOCKED — ${state.enforcementType || 'unknown'}, expires ${state.expiresAt?.toISOString() || 'unknown'}`);
+        }
+        config.timelock?.onTimelockDetected?.(state);
+      },
+      onTimelockLifted: (state) => {
+        if (this.logging) {
+          console.log(`[baileys-antiban] Timelock lifted — resuming new contact messages`);
+        }
+        config.timelock?.onTimelockLifted?.(state);
+      },
+    });
   }
 
   /**
@@ -90,6 +109,21 @@ export class AntiBan {
         allowed: false,
         delayMs: 0,
         reason: `Health risk ${healthStatus.risk}: ${healthStatus.recommendation}`,
+        health: healthStatus,
+      };
+    }
+
+    // Timelock guard (allows existing chats, blocks new contacts)
+    const timelockDecision = this.timelockGuard.canSend(recipient);
+    if (!timelockDecision.allowed) {
+      this.stats.messagesBlocked++;
+      if (this.logging) {
+        console.log(`[baileys-antiban] TIMELOCKED — ${timelockDecision.reason}`);
+      }
+      return {
+        allowed: false,
+        delayMs: 0,
+        reason: timelockDecision.reason,
         health: healthStatus,
       };
     }
@@ -177,6 +211,11 @@ export class AntiBan {
     };
   }
 
+  /** Get the timelock guard for direct access */
+  get timelock(): TimelockGuard {
+    return this.timelockGuard;
+  }
+
   /**
    * Export warm-up state for persistence between restarts
    */
@@ -208,6 +247,7 @@ export class AntiBan {
    * Reset everything (use after a ban period)
    */
   reset(): void {
+    this.timelockGuard.reset();
     this.health.reset();
     this.warmUp.reset();
     this.stats = { messagesAllowed: 0, messagesBlocked: 0, totalDelayMs: 0 };

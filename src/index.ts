@@ -12,6 +12,7 @@ export { AntiBan, type AntiBanConfig, type AntiBanStats } from './antiban.js';
 export { RateLimiter, type RateLimiterConfig } from './rateLimiter.js';
 export { WarmUp, type WarmUpConfig, type WarmUpState } from './warmup.js';
 export { HealthMonitor, type HealthStatus, type BanRiskLevel } from './health.js';
+export { TimelockGuard, type TimelockGuardConfig, type TimelockState } from './timelockGuard.js';
 export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';
 export { ContentVariator, type VariatorConfig } from './contentVariator.js';
 export { WebhookAlerts, type WebhookConfig } from './webhooks.js';
