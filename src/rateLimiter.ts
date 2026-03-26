@@ -74,18 +74,25 @@ export class RateLimiter {
       return -1; // Hard block — daily limit reached
     }
 
-    // Check hourly limit
+    // BUG FIX 2: Hourly limit should block properly and sort messages
     const hourMessages = this.messages.filter(m => now - m.timestamp < 3600000);
     if (hourMessages.length >= this.config.maxPerHour) {
+      // Sort by timestamp to find the oldest message in the window
+      hourMessages.sort((a, b) => a.timestamp - b.timestamp);
       const oldestInHour = hourMessages[0];
-      return oldestInHour ? (oldestInHour.timestamp + 3600000) - now : 60000;
+      const delay = oldestInHour ? (oldestInHour.timestamp + 3600000) - now : 3600000;
+      // Return a proper blocking delay (at least the time until the oldest message expires)
+      return Math.max(delay, 60000);
     }
 
     // Check per-minute limit
     const minuteMessages = this.messages.filter(m => now - m.timestamp < 60000);
     if (minuteMessages.length >= this.config.maxPerMinute) {
+      // Sort by timestamp to find the oldest message in the window
+      minuteMessages.sort((a, b) => a.timestamp - b.timestamp);
       const oldestInMinute = minuteMessages[0];
-      return oldestInMinute ? (oldestInMinute.timestamp + 60000) - now : 10000;
+      const delay = oldestInMinute ? (oldestInMinute.timestamp + 60000) - now : 60000;
+      return Math.max(delay, 1000);
     }
 
     // Check identical message limit
@@ -131,6 +138,12 @@ export class RateLimiter {
     const now = Date.now();
     const contentHash = this.hashContent(content);
 
+    // BUG FIX 1: Check burst reset BEFORE updating lastMessageTime
+    const timeSinceLast = now - this.lastMessageTime;
+    if (timeSinceLast > 30000) {
+      this.burstCount = 0;
+    }
+
     this.messages.push({ timestamp: now, recipient, contentHash });
     this.knownChats.add(recipient);
     this.lastMessageTime = now;
@@ -138,11 +151,6 @@ export class RateLimiter {
     // Track identical messages
     const count = (this.identicalCount.get(contentHash) || 0) + 1;
     this.identicalCount.set(contentHash, count);
-
-    // Reset burst counter after inactivity
-    if (now - this.lastMessageTime > 30000) {
-      this.burstCount = 0;
-    }
   }
 
   /**
@@ -168,9 +176,13 @@ export class RateLimiter {
     // Remove messages older than 24 hours
     this.messages = this.messages.filter(m => now - m.timestamp < 86400000);
 
-    // Reset identical counters every hour
-    if (this.messages.length === 0) {
-      this.identicalCount.clear();
+    // BUG FIX 3: Clean up identicalCount Map to prevent memory leak
+    // Remove entries for content hashes that are no longer in recent messages
+    const recentHashes = new Set(this.messages.map(m => m.contentHash));
+    for (const hash of this.identicalCount.keys()) {
+      if (!recentHashes.has(hash)) {
+        this.identicalCount.delete(hash);
+      }
     }
   }
 

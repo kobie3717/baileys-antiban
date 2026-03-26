@@ -39,6 +39,7 @@ export class TimelockGuard {
   };
   private knownChats: Set<string> = new Set();
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
+  private timerGeneration = 0; // BUG FIX 4: Track timer validity to prevent race conditions
 
   constructor(config: Partial<TimelockGuardConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -198,8 +199,15 @@ export class TimelockGuard {
     if (this.state.expiresAt) {
       const delay = this.state.expiresAt.getTime() - Date.now() + this.config.resumeBufferMs;
       if (delay > 0) {
+        // BUG FIX 4: Increment generation to invalidate any pending timers
+        this.timerGeneration++;
+        const currentGeneration = this.timerGeneration;
+
         this.resumeTimer = setTimeout(() => {
-          this.lift();
+          // Only lift if this timer is still valid (not superseded by a newer scheduleResume call)
+          if (currentGeneration === this.timerGeneration) {
+            this.lift();
+          }
         }, delay);
       }
     }
@@ -209,6 +217,8 @@ export class TimelockGuard {
     if (this.resumeTimer) {
       clearTimeout(this.resumeTimer);
       this.resumeTimer = null;
+      // Increment generation to invalidate any pending timer callbacks
+      this.timerGeneration++;
     }
   }
 }
