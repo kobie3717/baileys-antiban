@@ -8,13 +8,21 @@
  * @license MIT
  */
 
-export { AntiBan, type AntiBanConfig, type AntiBanStats } from './antiban.js';
+// Core
+export { AntiBan, type AntiBanConfig, type AntiBanStats, type SendDecision } from './antiban.js';
 export { RateLimiter, type RateLimiterConfig } from './rateLimiter.js';
 export { WarmUp, type WarmUpConfig, type WarmUpState } from './warmup.js';
-export { HealthMonitor, type HealthStatus, type BanRiskLevel } from './health.js';
+export { HealthMonitor, type HealthStatus, type HealthMonitorConfig, type BanRiskLevel } from './health.js';
 export { TimelockGuard, type TimelockGuardConfig, type TimelockState } from './timelockGuard.js';
+
+// Socket wrapper
+export { wrapSocket, type WrappedSocket } from './wrapper.js';
+
+// Optional features
 export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';
 export { ContentVariator, type VariatorConfig } from './contentVariator.js';
 export { WebhookAlerts, type WebhookConfig } from './webhooks.js';
 export { Scheduler, type SchedulerConfig } from './scheduler.js';
-export { wrapSocket, type WrappedSocket } from './wrapper.js';
+
+// State persistence
+export { type StateAdapter, FileStateAdapter } from './stateAdapter.js';

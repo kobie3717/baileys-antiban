@@ -17,7 +17,7 @@
 import { RateLimiter, type RateLimiterConfig } from './rateLimiter.js';
 import { WarmUp, type WarmUpConfig, type WarmUpState } from './warmup.js';
 import { HealthMonitor, type HealthMonitorConfig, type HealthStatus } from './health.js';
-import { TimelockGuard, type TimelockGuardConfig, type TimelockState } from './timelockGuard.js';
+import { TimelockGuard, type TimelockGuardConfig } from './timelockGuard.js';
 
 export interface AntiBanConfig {
   rateLimiter?: Partial<RateLimiterConfig>;

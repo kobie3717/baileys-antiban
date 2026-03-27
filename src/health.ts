@@ -56,13 +56,6 @@ interface Event {
   detail?: string;
 }
 
-const RISK_SCORES: Record<BanRiskLevel, number> = {
-  low: 0,
-  medium: 30,
-  high: 60,
-  critical: 85,
-};
-
 export class HealthMonitor {
   private config: HealthMonitorConfig;
   private events: Event[] = [];

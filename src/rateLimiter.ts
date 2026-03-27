@@ -26,7 +26,19 @@ export interface RateLimiterConfig {
   maxIdenticalMessages: number;
   /** Burst allowance - messages before rate limiting kicks in (default: 3) */
   burstAllowance: number;
+  /** Time window for tracking identical messages in ms (default: 3600000 = 1 hour) */
+  identicalMessageWindowMs: number;
 }
+
+// Time constants for clarity
+const TIME_CONSTANTS = {
+  MS_PER_SECOND: 1000,
+  MS_PER_MINUTE: 60000,
+  MS_PER_HOUR: 3600000,
+  MS_PER_DAY: 86400000,
+  BURST_RESET_MS: 30000,
+  IDENTICAL_WINDOW_MS: 3600000, // 1 hour
+} as const;
 
 const DEFAULT_CONFIG: RateLimiterConfig = {
   maxPerMinute: 8,
@@ -37,6 +49,7 @@ const DEFAULT_CONFIG: RateLimiterConfig = {
   newChatDelayMs: 3000,
   maxIdenticalMessages: 3,
   burstAllowance: 3,
+  identicalMessageWindowMs: TIME_CONSTANTS.IDENTICAL_WINDOW_MS,
 };
 
 interface MessageRecord {
@@ -45,10 +58,16 @@ interface MessageRecord {
   contentHash: string;
 }
 
+interface IdenticalMessageTracker {
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+}
+
 export class RateLimiter {
   private config: RateLimiterConfig;
   private messages: MessageRecord[] = [];
-  private identicalCount = new Map<string, number>();
+  private identicalCount = new Map<string, IdenticalMessageTracker>();
   private knownChats = new Set<string>();
   private burstCount = 0;
   private lastMessageTime = 0;
@@ -69,37 +88,41 @@ export class RateLimiter {
     const contentHash = this.hashContent(content);
 
     // Check daily limit
-    const dayMessages = this.messages.filter(m => now - m.timestamp < 86400000);
+    const dayMessages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_DAY);
     if (dayMessages.length >= this.config.maxPerDay) {
       return -1; // Hard block — daily limit reached
     }
 
-    // BUG FIX 2: Hourly limit should block properly and sort messages
-    const hourMessages = this.messages.filter(m => now - m.timestamp < 3600000);
+    // Check hourly limit
+    const hourMessages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_HOUR);
     if (hourMessages.length >= this.config.maxPerHour) {
       // Sort by timestamp to find the oldest message in the window
       hourMessages.sort((a, b) => a.timestamp - b.timestamp);
       const oldestInHour = hourMessages[0];
-      const delay = oldestInHour ? (oldestInHour.timestamp + 3600000) - now : 3600000;
+      const delay = oldestInHour ? (oldestInHour.timestamp + TIME_CONSTANTS.MS_PER_HOUR) - now : TIME_CONSTANTS.MS_PER_HOUR;
       // Return a proper blocking delay (at least the time until the oldest message expires)
-      return Math.max(delay, 60000);
+      return Math.max(delay, TIME_CONSTANTS.MS_PER_MINUTE);
     }
 
     // Check per-minute limit
-    const minuteMessages = this.messages.filter(m => now - m.timestamp < 60000);
+    const minuteMessages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_MINUTE);
     if (minuteMessages.length >= this.config.maxPerMinute) {
       // Sort by timestamp to find the oldest message in the window
       minuteMessages.sort((a, b) => a.timestamp - b.timestamp);
       const oldestInMinute = minuteMessages[0];
-      const delay = oldestInMinute ? (oldestInMinute.timestamp + 60000) - now : 60000;
-      return Math.max(delay, 1000);
+      const delay = oldestInMinute ? (oldestInMinute.timestamp + TIME_CONSTANTS.MS_PER_MINUTE) - now : TIME_CONSTANTS.MS_PER_MINUTE;
+      return Math.max(delay, TIME_CONSTANTS.MS_PER_SECOND);
     }
 
-    // Check identical message limit
-    const identicalKey = `${contentHash}`;
-    const identicalSent = this.identicalCount.get(identicalKey) || 0;
-    if (identicalSent >= this.config.maxIdenticalMessages) {
-      return -1; // Block identical spam
+    // Check identical message limit (within time window)
+    const tracker = this.identicalCount.get(contentHash);
+    if (tracker) {
+      // Check if tracker is still within the time window
+      if (now - tracker.firstSeen < this.config.identicalMessageWindowMs) {
+        if (tracker.count >= this.config.maxIdenticalMessages) {
+          return -1; // Block identical spam within time window
+        }
+      }
     }
 
     // Calculate human-like delay
@@ -140,7 +163,7 @@ export class RateLimiter {
 
     // BUG FIX 1: Check burst reset BEFORE updating lastMessageTime
     const timeSinceLast = now - this.lastMessageTime;
-    if (timeSinceLast > 30000) {
+    if (timeSinceLast > TIME_CONSTANTS.BURST_RESET_MS) {
       this.burstCount = 0;
     }
 
@@ -148,9 +171,20 @@ export class RateLimiter {
     this.knownChats.add(recipient);
     this.lastMessageTime = now;
 
-    // Track identical messages
-    const count = (this.identicalCount.get(contentHash) || 0) + 1;
-    this.identicalCount.set(contentHash, count);
+    // Track identical messages with time window
+    const tracker = this.identicalCount.get(contentHash);
+    if (tracker) {
+      // Check if within same window
+      if (now - tracker.firstSeen < this.config.identicalMessageWindowMs) {
+        tracker.count++;
+        tracker.lastSeen = now;
+      } else {
+        // Start new window
+        this.identicalCount.set(contentHash, { count: 1, firstSeen: now, lastSeen: now });
+      }
+    } else {
+      this.identicalCount.set(contentHash, { count: 1, firstSeen: now, lastSeen: now });
+    }
   }
 
   /**
@@ -160,9 +194,9 @@ export class RateLimiter {
     const now = Date.now();
     this.cleanup(now);
     return {
-      lastMinute: this.messages.filter(m => now - m.timestamp < 60000).length,
-      lastHour: this.messages.filter(m => now - m.timestamp < 3600000).length,
-      lastDay: this.messages.filter(m => now - m.timestamp < 86400000).length,
+      lastMinute: this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_MINUTE).length,
+      lastHour: this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_HOUR).length,
+      lastDay: this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_DAY).length,
       limits: {
         perMinute: this.config.maxPerMinute,
         perHour: this.config.maxPerHour,
@@ -174,13 +208,12 @@ export class RateLimiter {
 
   private cleanup(now: number): void {
     // Remove messages older than 24 hours
-    this.messages = this.messages.filter(m => now - m.timestamp < 86400000);
+    this.messages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_DAY);
 
-    // BUG FIX 3: Clean up identicalCount Map to prevent memory leak
-    // Remove entries for content hashes that are no longer in recent messages
-    const recentHashes = new Set(this.messages.map(m => m.contentHash));
-    for (const hash of this.identicalCount.keys()) {
-      if (!recentHashes.has(hash)) {
+    // Clean up identicalCount Map based on time windows (not just message presence)
+    // Remove trackers where the window has expired
+    for (const [hash, tracker] of this.identicalCount.entries()) {
+      if (now - tracker.lastSeen > this.config.identicalMessageWindowMs) {
         this.identicalCount.delete(hash);
       }
     }

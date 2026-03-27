@@ -5,16 +5,38 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
   "scripts": {
     "build": "tsc",
-    "test": "jest"
+    "test": "npx tsx tests/manual-test.ts",
+    "test:check": "tsc --noEmit && npm test",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "baileys",
     "whatsapp",
     "anti-ban",
     "rate-limit",
-    "middleware"
+    "middleware",
+    "whatsapp-bot",
+    "bot-protection",
+    "whatsapp-api",
+    "nodejs"
   ],
   "author": "Kobus Wentzel <kobie@pop.co.za>",
   "license": "MIT",
@@ -30,7 +52,11 @@
     "baileys": ">=6.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.6",
+    "tsx": "^4.21.0",
+    "typescript": "^5.0.0"
   }
 }
