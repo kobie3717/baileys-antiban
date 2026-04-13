@@ -1,0 +1,94 @@
+/**
+ * Socket Wrapper — Drop-in replacement that wraps sendMessage with anti-ban protection
+ *
+ * Usage:
+ *   import makeWASocket from 'baileys';
+ *   import { wrapSocket } from 'baileys-antiban';
+ *
+ *   const sock = makeWASocket({ ... });
+ *   const safeSock = wrapSocket(sock);
+ *
+ *   // Use safeSock.sendMessage() — automatically rate-limited and monitored
+ *   await safeSock.sendMessage(jid, { text: 'Hello!' });
+ *
+ *   // Check health anytime
+ *   console.log(safeSock.antiban.getStats());
+ */
+import { AntiBan } from './antiban.js';
+/**
+ * Wrap a Baileys socket with anti-ban protection.
+ * The returned socket has the same API but sendMessage() is protected.
+ */
+export function wrapSocket(sock, config, warmUpState) {
+    const antiban = new AntiBan(config, warmUpState);
+    // Hook into connection events for health monitoring
+    sock.ev.on('connection.update', (update) => {
+        if (update.connection === 'close') {
+            const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
+            antiban.onDisconnect(reason);
+            antiban.destroy(); // Clean up all timers
+        }
+        if (update.connection === 'open') {
+            antiban.onReconnect();
+        }
+        // Reachout timelock detection
+        if (update.reachoutTimeLock) {
+            antiban.timelock.onTimelockUpdate({
+                isActive: update.reachoutTimeLock.isActive,
+                timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
+                enforcementType: update.reachoutTimeLock.enforcementType,
+            });
+        }
+    });
+    // Catch 463 errors from message updates
+    sock.ev.on('messages.update', (updates) => {
+        for (const update of updates) {
+            if (update?.update?.messageStubParameters) {
+                const params = update.update.messageStubParameters;
+                if (params.includes(463) || params.includes('463')) {
+                    antiban.timelock.record463Error();
+                }
+            }
+        }
+    });
+    // Register known chats from incoming messages
+    sock.ev.on('messages.upsert', ({ messages }) => {
+        for (const msg of messages || []) {
+            if (msg.key?.remoteJid) {
+                antiban.timelock.registerKnownChat(msg.key.remoteJid);
+            }
+        }
+    });
+    // Create proxy that intercepts sendMessage
+    const originalSendMessage = sock.sendMessage.bind(sock);
+    const wrappedSendMessage = async (jid, content, options) => {
+        // Extract text content for rate limiter analysis
+        const text = content?.text || content?.caption || content?.image?.caption || '';
+        const decision = await antiban.beforeSend(jid, text);
+        if (!decision.allowed) {
+            throw new Error(`[baileys-antiban] Message blocked: ${decision.reason}`);
+        }
+        // Apply delay
+        if (decision.delayMs > 0) {
+            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
+        }
+        // Send message
+        try {
+            const result = await originalSendMessage(jid, content, options);
+            antiban.afterSend(jid, text);
+            antiban.timelock.registerKnownChat(jid);
+            return result;
+        }
+        catch (error) {
+            antiban.afterSendFailed(error instanceof Error ? error.message : String(error));
+            throw error;
+        }
+    };
+    // Return enhanced socket
+    const wrapped = Object.create(sock);
+    wrapped.sendMessage = wrappedSendMessage;
+    wrapped.antiban = antiban;
+    // Expose destroy method directly so consumers can call it manually if needed
+    wrapped.antiban.destroy = antiban.destroy.bind(antiban);
+    return wrapped;
+}

@@ -44,6 +44,7 @@ export function wrapSocket(
     if (update.connection === 'close') {
       const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
       antiban.onDisconnect(reason);
+      antiban.destroy(); // Clean up all timers
     }
     if (update.connection === 'open') {
       antiban.onReconnect();
@@ -113,6 +114,9 @@ export function wrapSocket(
   const wrapped = Object.create(sock) as WrappedSocket;
   wrapped.sendMessage = wrappedSendMessage;
   wrapped.antiban = antiban;
+
+  // Expose destroy method directly so consumers can call it manually if needed
+  (wrapped.antiban as any).destroy = antiban.destroy.bind(antiban);
 
   return wrapped;
 }

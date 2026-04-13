@@ -41,6 +41,15 @@ export interface WarmUpState {
   graduated: boolean;
 }
 
+export interface WarmUpStatus {
+  phase: 'warming' | 'graduated';
+  day: number;
+  totalDays: number;
+  todayLimit: number;
+  todaySent: number;
+  progress: number;
+}
+
 export class WarmUp {
   private config: WarmUpConfig;
   private state: WarmUpState;
@@ -95,14 +104,7 @@ export class WarmUp {
   /**
    * Get current warm-up status
    */
-  getStatus(): {
-    phase: 'warming' | 'graduated';
-    day: number;
-    totalDays: number;
-    todayLimit: number;
-    todaySent: number;
-    progress: number;
-  } {
+  getStatus(): WarmUpStatus {
     const day = this.getCurrentDay();
     const todaySent = this.state.dailyCounts[day] || 0;
     const limit = this.getDailyLimit();

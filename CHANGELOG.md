@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-13
+
+### Added
+- **`destroy()` method** in `AntiBan` class to clean up all timers and resources
+- **`destroy()` method** in `MessageQueue` class to clean up interval timer
+- **Explicit stat interfaces** exported from library:
+  - `WarmUpStatus` interface (replaces opaque `ReturnType<WarmUp['getStatus']>`)
+  - `RateLimiterStats` interface (replaces opaque `ReturnType<RateLimiter['getStats']>`)
+- Automatic cleanup on socket close in wrapper
+
+### Fixed
+- **Timer leak**: `AntiBan` now properly cleans up `TimelockGuard.resumeTimer` on connection close
+- **Type visibility**: Consumers can now see stat object shapes without inspecting implementation
+
+### Changed
+- `wrapSocket()` now automatically calls `antiban.destroy()` when `connection.close` event fires
+- `AntiBanStats` interface now uses explicit `WarmUpStatus` and `RateLimiterStats` types
+
 ## [1.1.0] - 2026-03-27
 
 ### Added

@@ -64,6 +64,18 @@ interface IdenticalMessageTracker {
   lastSeen: number;
 }
 
+export interface RateLimiterStats {
+  lastMinute: number;
+  lastHour: number;
+  lastDay: number;
+  limits: {
+    perMinute: number;
+    perHour: number;
+    perDay: number;
+  };
+  knownChats: number;
+}
+
 export class RateLimiter {
   private config: RateLimiterConfig;
   private messages: MessageRecord[] = [];
@@ -190,7 +202,7 @@ export class RateLimiter {
   /**
    * Get current usage stats
    */
-  getStats() {
+  getStats(): RateLimiterStats {
     const now = Date.now();
     this.cleanup(now);
     return {

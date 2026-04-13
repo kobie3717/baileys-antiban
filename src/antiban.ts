@@ -14,8 +14,8 @@
  *   }
  */
 
-import { RateLimiter, type RateLimiterConfig } from './rateLimiter.js';
-import { WarmUp, type WarmUpConfig, type WarmUpState } from './warmup.js';
+import { RateLimiter, type RateLimiterConfig, type RateLimiterStats } from './rateLimiter.js';
+import { WarmUp, type WarmUpConfig, type WarmUpState, type WarmUpStatus } from './warmup.js';
 import { HealthMonitor, type HealthMonitorConfig, type HealthStatus } from './health.js';
 import { TimelockGuard, type TimelockGuardConfig } from './timelockGuard.js';
 
@@ -41,8 +41,8 @@ export interface AntiBanStats {
   messagesBlocked: number;
   totalDelayMs: number;
   health: HealthStatus;
-  warmUp: ReturnType<WarmUp['getStatus']>;
-  rateLimiter: ReturnType<RateLimiter['getStats']>;
+  warmUp: WarmUpStatus;
+  rateLimiter: RateLimiterStats;
 }
 
 export class AntiBan {
@@ -253,6 +253,17 @@ export class AntiBan {
     this.stats = { messagesAllowed: 0, messagesBlocked: 0, totalDelayMs: 0 };
     if (this.logging) {
       console.log('[baileys-antiban] 🔄 Reset — starting fresh warm-up');
+    }
+  }
+
+  /**
+   * Clean up all timers and resources.
+   * Call this when disposing of the AntiBan instance or when the socket closes.
+   */
+  destroy(): void {
+    this.timelockGuard.reset(); // Clears the resumeTimer
+    if (this.logging) {
+      console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
     }
   }
 }

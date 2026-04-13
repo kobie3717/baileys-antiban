@@ -124,6 +124,14 @@ export class MessageQueue extends EventEmitter {
   }
 
   /**
+   * Clean up all timers and resources.
+   * Call this when disposing of the queue.
+   */
+  destroy(): void {
+    this.stop();
+  }
+
+  /**
    * Process the next message in the queue
    */
   private async processNext(): Promise<void> {
