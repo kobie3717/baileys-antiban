@@ -18,25 +18,32 @@
 import { AntiBan, type AntiBanConfig } from './antiban.js';
 import type { WarmUpState } from './warmup.js';
 
-type WASocket = {
+export type WASocket = {
   sendMessage: (jid: string, content: any, options?: any) => Promise<any>;
   ev: any;
   [key: string]: any;
 };
 
-export interface WrappedSocket extends WASocket {
+/**
+ * A Baileys socket wrapped with anti-ban protection.
+ *
+ * Generic over the input socket type `T` so the full Baileys typings
+ * (including strong return types on `sendMessage`) are preserved.
+ * `safeSock.antiban.getStats()` is now correctly typed as `AntiBanStats`.
+ */
+export type WrappedSocket<T extends WASocket = WASocket> = T & {
   antiban: AntiBan;
-}
+};
 
 /**
  * Wrap a Baileys socket with anti-ban protection.
  * The returned socket has the same API but sendMessage() is protected.
  */
-export function wrapSocket(
-  sock: WASocket,
+export function wrapSocket<T extends WASocket>(
+  sock: T,
   config?: AntiBanConfig,
   warmUpState?: WarmUpState
-): WrappedSocket {
+): WrappedSocket<T> {
   const antiban = new AntiBan(config, warmUpState);
 
   // Hook into connection events for health monitoring
@@ -111,8 +118,8 @@ export function wrapSocket(
   };
 
   // Return enhanced socket
-  const wrapped = Object.create(sock) as WrappedSocket;
-  wrapped.sendMessage = wrappedSendMessage;
+  const wrapped = Object.create(sock) as WrappedSocket<T>;
+  wrapped.sendMessage = wrappedSendMessage as T['sendMessage'];
   wrapped.antiban = antiban;
 
   // Expose destroy method directly so consumers can call it manually if needed
