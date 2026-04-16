@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-16
+
+### Added
+- **ReplyRatioGuard** — tracks outbound:inbound ratio per contact, blocks sends to non-responsive contacts, suggests auto-replies to incoming messages
+- **ContactGraphWarmer** — requires 1:1 handshake before bulk/group send, enforces group lurk period, daily stranger quota
+- **PresenceChoreographer** — circadian rhythm enforcement, distraction pauses, realistic read-receipt timing
+- All three features are **opt-in** via config and backward compatible
+- New wrapSocket option: `autoRespondToIncoming` for hands-off reply-ratio maintenance
+- New config fields: `replyRatio`, `contactGraph`, `presence` in `AntiBanConfig`
+- New public methods: `onIncomingMessage()`, getters for new modules
+- Enhanced `AntiBanStats` with optional `replyRatio`, `contactGraph`, `presence` stats
+
+### Why
+Based on 2025-2026 ban detection research: WhatsApp's ML models weight reply-ratio, contact-graph distance, and temporal patterns more heavily than raw volume. These modules address the three largest gaps in existing anti-ban libraries.
+
 ## [1.2.0] - 2026-04-13
 
 ### Added

@@ -13,6 +13,10 @@ export { RateLimiter } from './rateLimiter.js';
 export { WarmUp } from './warmup.js';
 export { HealthMonitor } from './health.js';
 export { TimelockGuard } from './timelockGuard.js';
+// v1.3 new modules
+export { ReplyRatioGuard } from './replyRatio.js';
+export { ContactGraphWarmer } from './contactGraph.js';
+export { PresenceChoreographer } from './presenceChoreographer.js';
 // Socket wrapper
 export { wrapSocket } from './wrapper.js';
 // Optional features

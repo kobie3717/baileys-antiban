@@ -6,6 +6,79 @@
 
 Anti-ban middleware for [Baileys](https://github.com/WhiskeySockets/Baileys) — protect your WhatsApp number with human-like messaging patterns.
 
+## v1.3 New Features
+
+### ReplyRatioGuard
+Tracks outbound:inbound message ratio per contact. Blocks sends to non-responsive contacts to avoid "spray-and-pray" ban patterns. Optionally suggests auto-replies to maintain healthy engagement.
+
+```typescript
+import { AntiBan } from 'baileys-antiban';
+
+const antiban = new AntiBan({
+  replyRatio: {
+    enabled: true,
+    minRatio: 0.10,              // Block sends to contacts with <10% reply rate
+    minMessagesBeforeEnforce: 5,  // Enforce after 5 outbound messages
+    cooldownHoursOnViolation: 24, // 24h cooldown on ratio violation
+  },
+});
+
+// Handle incoming messages to track replies
+sock.ev.on('messages.upsert', ({ messages }) => {
+  for (const msg of messages) {
+    if (!msg.key.fromMe) {
+      const suggestion = antiban.onIncomingMessage(msg.key.remoteJid);
+      if (suggestion.shouldReply) {
+        // Optionally auto-reply with suggestion.suggestedText
+      }
+    }
+  }
+});
+```
+
+### ContactGraphWarmer
+Requires 1:1 handshake before bulk/group sends. Enforces group lurk period (don't spam immediately after joining). Caps daily new-contact messaging.
+
+```typescript
+const antiban = new AntiBan({
+  contactGraph: {
+    enabled: true,
+    requireHandshakeBeforeGroupSend: true,
+    handshakeMinDelayMs: 3600000,  // 1h between handshake and first real message
+    groupLurkPeriodMs: 43200000,   // 12h lurk before first group send
+    maxStrangerMessagesPerDay: 5,  // Max 5 new contacts per day
+  },
+});
+
+// Mark handshake sent/complete manually
+antiban.contactGraph.markHandshakeSent(jid);
+antiban.contactGraph.markHandshakeComplete(jid);
+
+// Or auto-register known contacts on incoming messages
+// (enabled by default with autoRegisterOnIncoming: true)
+```
+
+### PresenceChoreographer
+Adds circadian rhythm to sending patterns (slower at night, faster during business hours). Injects realistic distraction pauses, offline gaps, and read-receipt timing variations.
+
+```typescript
+const antiban = new AntiBan({
+  presence: {
+    enabled: true,
+    enableCircadianRhythm: true,
+    timezone: 'Africa/Johannesburg',
+    activityCurve: 'office',        // 'office' | 'social' | 'global'
+    distractionPauseProbability: 0.05, // 5% chance per send to pause 5-20min
+    offlineGapProbability: 0.03,    // 3% chance to go offline 5-15min
+  },
+});
+
+// Delays are automatically adjusted based on local time-of-day
+// No manual intervention needed
+```
+
+**Why these features?** 2025-2026 ban research showed WhatsApp's ML models heavily weight reply-ratio (<10% = high risk), contact-graph distance (strangers = high risk), and temporal patterns (robotic timing = high risk). These modules address the three largest gaps in existing anti-ban libraries.
+
 ## Why?
 
 WhatsApp bans numbers that behave like bots. This library makes your Baileys bot behave like a human:
@@ -16,6 +89,9 @@ WhatsApp bans numbers that behave like bots. This library makes your Baileys bot
 - **Timelock handling** for 463 reachout errors
 - **Auto-pause** when risk gets too high
 - **Drop-in wrapper** — one line to protect your existing bot
+- **Reply ratio tracking** (v1.3) — blocks sends to non-responsive contacts
+- **Contact graph enforcement** (v1.3) — requires handshakes before bulk/group sends
+- **Circadian rhythm** (v1.3) — realistic time-of-day activity patterns
 
 ## Installation
 

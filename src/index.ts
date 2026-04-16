@@ -15,8 +15,13 @@ export { WarmUp, type WarmUpConfig, type WarmUpState, type WarmUpStatus } from '
 export { HealthMonitor, type HealthStatus, type HealthMonitorConfig, type BanRiskLevel } from './health.js';
 export { TimelockGuard, type TimelockGuardConfig, type TimelockState } from './timelockGuard.js';
 
+// v1.3 new modules
+export { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './replyRatio.js';
+export { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats, type ContactState } from './contactGraph.js';
+export { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
+
 // Socket wrapper
-export { wrapSocket, type WrappedSocket } from './wrapper.js';
+export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 
 // Optional features
 export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';

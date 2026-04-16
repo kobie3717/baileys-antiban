@@ -31,6 +31,11 @@ export type WASocket = {
  * (including strong return types on `sendMessage`) are preserved.
  * `safeSock.antiban.getStats()` is now correctly typed as `AntiBanStats`.
  */
+export interface WrapSocketOptions {
+  /** Auto-respond to incoming messages when reply ratio suggests it (default: false) */
+  autoRespondToIncoming?: boolean;
+}
+
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
   antiban: AntiBan;
 };
@@ -42,9 +47,14 @@ export type WrappedSocket<T extends WASocket = WASocket> = T & {
 export function wrapSocket<T extends WASocket>(
   sock: T,
   config?: AntiBanConfig,
-  warmUpState?: WarmUpState
+  warmUpState?: WarmUpState,
+  wrapOptions?: WrapSocketOptions
 ): WrappedSocket<T> {
   const antiban = new AntiBan(config, warmUpState);
+  const options: Required<WrapSocketOptions> = {
+    autoRespondToIncoming: false,
+    ...wrapOptions,
+  };
 
   // Hook into connection events for health monitoring
   sock.ev.on('connection.update', (update: any) => {
@@ -78,11 +88,41 @@ export function wrapSocket<T extends WASocket>(
     }
   });
 
-  // Register known chats from incoming messages
+  // Register known chats from incoming messages + handle reply suggestions
   sock.ev.on('messages.upsert', ({ messages }: any) => {
     for (const msg of messages || []) {
-      if (msg.key?.remoteJid) {
-        antiban.timelock.registerKnownChat(msg.key.remoteJid);
+      const jid = msg.key?.remoteJid;
+      if (!jid) continue;
+
+      // Register known chat
+      antiban.timelock.registerKnownChat(jid);
+
+      // Skip self messages
+      const isSelf = msg.key?.fromMe || false;
+      if (isSelf) continue;
+
+      // Extract message text
+      const msgText =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        msg.message?.videoMessage?.caption ||
+        '';
+
+      // Handle incoming message (updates reply ratio + contact graph)
+      const replySuggestion = antiban.onIncomingMessage(jid, msgText);
+
+      // Auto-respond if enabled and suggested
+      if (options.autoRespondToIncoming && replySuggestion.shouldReply && replySuggestion.suggestedText) {
+        // Random delay 3-15s
+        const replyDelay = Math.floor(Math.random() * 12000) + 3000;
+        setTimeout(async () => {
+          try {
+            await sock.sendMessage(jid, { text: replySuggestion.suggestedText });
+          } catch (error) {
+            // Silently fail — auto-reply is best-effort
+          }
+        }, replyDelay);
       }
     }
   });

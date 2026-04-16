@@ -17,11 +17,17 @@ import { type RateLimiterConfig, type RateLimiterStats } from './rateLimiter.js'
 import { type WarmUpConfig, type WarmUpState, type WarmUpStatus } from './warmup.js';
 import { type HealthMonitorConfig, type HealthStatus } from './health.js';
 import { TimelockGuard, type TimelockGuardConfig } from './timelockGuard.js';
+import { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './replyRatio.js';
+import { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats } from './contactGraph.js';
+import { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
 export interface AntiBanConfig {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
     health?: Partial<HealthMonitorConfig>;
     timelock?: Partial<TimelockGuardConfig>;
+    replyRatio?: Partial<ReplyRatioConfig>;
+    contactGraph?: Partial<ContactGraphConfig>;
+    presence?: Partial<PresenceChoreographerConfig>;
     /** Log warnings and blocks to console (default: true) */
     logging?: boolean;
 }
@@ -39,12 +45,18 @@ export interface AntiBanStats {
     health: HealthStatus;
     warmUp: WarmUpStatus;
     rateLimiter: RateLimiterStats;
+    replyRatio?: ReplyRatioStats;
+    contactGraph?: ContactGraphStats;
+    presence?: PresenceChoreographerStats;
 }
 export declare class AntiBan {
     private rateLimiter;
     private warmUp;
     private health;
     private timelockGuard;
+    private replyRatioGuard;
+    private contactGraphWarmer;
+    private presenceChoreographer;
     private logging;
     private stats;
     constructor(config?: AntiBanConfig, warmUpState?: WarmUpState);
@@ -71,11 +83,25 @@ export declare class AntiBan {
      */
     onReconnect(): void;
     /**
+     * Handle incoming message — record in reply ratio + contact graph.
+     * Returns suggested reply if reply ratio suggests auto-reply.
+     */
+    onIncomingMessage(jid: string, msgText?: string): {
+        shouldReply: boolean;
+        suggestedText?: string;
+    };
+    /**
      * Get comprehensive stats
      */
     getStats(): AntiBanStats;
     /** Get the timelock guard for direct access */
     get timelock(): TimelockGuard;
+    /** Get the reply ratio guard for direct access */
+    get replyRatio(): ReplyRatioGuard;
+    /** Get the contact graph warmer for direct access */
+    get contactGraph(): ContactGraphWarmer;
+    /** Get the presence choreographer for direct access */
+    get presence(): PresenceChoreographer;
     /**
      * Export warm-up state for persistence between restarts
      */

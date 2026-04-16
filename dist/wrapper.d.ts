@@ -28,6 +28,10 @@ export type WASocket = {
  * (including strong return types on `sendMessage`) are preserved.
  * `safeSock.antiban.getStats()` is now correctly typed as `AntiBanStats`.
  */
+export interface WrapSocketOptions {
+    /** Auto-respond to incoming messages when reply ratio suggests it (default: false) */
+    autoRespondToIncoming?: boolean;
+}
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
     antiban: AntiBan;
 };
@@ -35,4 +39,4 @@ export type WrappedSocket<T extends WASocket = WASocket> = T & {
  * Wrap a Baileys socket with anti-ban protection.
  * The returned socket has the same API but sendMessage() is protected.
  */
-export declare function wrapSocket<T extends WASocket>(sock: T, config?: AntiBanConfig, warmUpState?: WarmUpState): WrappedSocket<T>;
+export declare function wrapSocket<T extends WASocket>(sock: T, config?: AntiBanConfig, warmUpState?: WarmUpState, wrapOptions?: WrapSocketOptions): WrappedSocket<T>;

@@ -17,11 +17,17 @@ import { RateLimiter } from './rateLimiter.js';
 import { WarmUp } from './warmup.js';
 import { HealthMonitor } from './health.js';
 import { TimelockGuard } from './timelockGuard.js';
+import { ReplyRatioGuard } from './replyRatio.js';
+import { ContactGraphWarmer } from './contactGraph.js';
+import { PresenceChoreographer } from './presenceChoreographer.js';
 export class AntiBan {
     rateLimiter;
     warmUp;
     health;
     timelockGuard;
+    replyRatioGuard;
+    contactGraphWarmer;
+    presenceChoreographer;
     logging;
     stats = {
         messagesAllowed: 0,
@@ -60,6 +66,9 @@ export class AntiBan {
                 config.timelock?.onTimelockLifted?.(state);
             },
         });
+        this.replyRatioGuard = new ReplyRatioGuard(config.replyRatio);
+        this.contactGraphWarmer = new ContactGraphWarmer(config.contactGraph);
+        this.presenceChoreographer = new PresenceChoreographer(config.presence);
     }
     /**
      * Check if a message can be sent and get required delay.
@@ -109,8 +118,36 @@ export class AntiBan {
                 warmUpDay: warmUpStatus.day,
             };
         }
+        // Contact graph check
+        const contactGraphDecision = this.contactGraphWarmer.canMessage(recipient);
+        if (!contactGraphDecision.allowed) {
+            this.stats.messagesBlocked++;
+            if (this.logging) {
+                console.log(`[baileys-antiban] 📊 BLOCKED — contact graph: ${contactGraphDecision.reason}`);
+            }
+            return {
+                allowed: false,
+                delayMs: 0,
+                reason: `Contact graph: ${contactGraphDecision.reason}`,
+                health: healthStatus,
+            };
+        }
+        // Reply ratio check
+        const replyRatioDecision = this.replyRatioGuard.beforeSend(recipient);
+        if (!replyRatioDecision.allowed) {
+            this.stats.messagesBlocked++;
+            if (this.logging) {
+                console.log(`[baileys-antiban] 💬 BLOCKED — reply ratio: ${replyRatioDecision.reason}`);
+            }
+            return {
+                allowed: false,
+                delayMs: 0,
+                reason: `Reply ratio: ${replyRatioDecision.reason}`,
+                health: healthStatus,
+            };
+        }
         // Rate limiter delay
-        const delay = await this.rateLimiter.getDelay(recipient, content);
+        let delay = await this.rateLimiter.getDelay(recipient, content);
         if (delay === -1) {
             this.stats.messagesBlocked++;
             if (this.logging) {
@@ -122,6 +159,29 @@ export class AntiBan {
                 reason: 'Rate limit exceeded or identical message spam detected',
                 health: healthStatus,
             };
+        }
+        // Apply circadian rhythm multiplier to delay
+        const activityFactor = this.presenceChoreographer.getCurrentActivityFactor();
+        if (activityFactor < 1.0) {
+            // Lower activity = longer delays (cap at 5x)
+            const multiplier = Math.min(5, 1 / activityFactor);
+            delay = Math.floor(delay * multiplier);
+        }
+        // Roll for distraction pause
+        const distractionCheck = this.presenceChoreographer.shouldPauseForDistraction();
+        if (distractionCheck.pause) {
+            delay += distractionCheck.durationMs;
+            if (this.logging) {
+                console.log(`[baileys-antiban] ⏸️  Distraction pause: +${Math.floor(distractionCheck.durationMs / 60000)}min`);
+            }
+        }
+        // Roll for offline gap
+        const offlineCheck = this.presenceChoreographer.shouldTakeOfflineGap();
+        if (offlineCheck.offline) {
+            delay += offlineCheck.durationMs;
+            if (this.logging) {
+                console.log(`[baileys-antiban] 📴 Offline gap: +${Math.floor(offlineCheck.durationMs / 60000)}min`);
+            }
         }
         this.stats.totalDelayMs += delay;
         return {
@@ -137,6 +197,7 @@ export class AntiBan {
     afterSend(recipient, content) {
         this.rateLimiter.record(recipient, content);
         this.warmUp.record();
+        this.replyRatioGuard.recordSent(recipient);
         this.stats.messagesAllowed++;
     }
     /**
@@ -158,19 +219,51 @@ export class AntiBan {
         this.health.recordReconnect();
     }
     /**
+     * Handle incoming message — record in reply ratio + contact graph.
+     * Returns suggested reply if reply ratio suggests auto-reply.
+     */
+    onIncomingMessage(jid, msgText) {
+        this.replyRatioGuard.recordReceived(jid);
+        this.contactGraphWarmer.onIncomingMessage(jid);
+        return this.replyRatioGuard.suggestReply(jid, msgText);
+    }
+    /**
      * Get comprehensive stats
      */
     getStats() {
-        return {
+        const stats = {
             ...this.stats,
             health: this.health.getStatus(),
             warmUp: this.warmUp.getStatus(),
             rateLimiter: this.rateLimiter.getStats(),
         };
+        // Only include new stats if enabled
+        if (this.replyRatioGuard['config']?.enabled) {
+            stats.replyRatio = this.replyRatioGuard.getStats();
+        }
+        if (this.contactGraphWarmer['config']?.enabled) {
+            stats.contactGraph = this.contactGraphWarmer.getStats();
+        }
+        if (this.presenceChoreographer['config']?.enabled) {
+            stats.presence = this.presenceChoreographer.getStats();
+        }
+        return stats;
     }
     /** Get the timelock guard for direct access */
     get timelock() {
         return this.timelockGuard;
+    }
+    /** Get the reply ratio guard for direct access */
+    get replyRatio() {
+        return this.replyRatioGuard;
+    }
+    /** Get the contact graph warmer for direct access */
+    get contactGraph() {
+        return this.contactGraphWarmer;
+    }
+    /** Get the presence choreographer for direct access */
+    get presence() {
+        return this.presenceChoreographer;
     }
     /**
      * Export warm-up state for persistence between restarts
@@ -203,6 +296,9 @@ export class AntiBan {
         this.timelockGuard.reset();
         this.health.reset();
         this.warmUp.reset();
+        this.replyRatioGuard.reset();
+        this.contactGraphWarmer.reset();
+        this.presenceChoreographer.reset();
         this.stats = { messagesAllowed: 0, messagesBlocked: 0, totalDelayMs: 0 };
         if (this.logging) {
             console.log('[baileys-antiban] 🔄 Reset — starting fresh warm-up');
@@ -214,6 +310,9 @@ export class AntiBan {
      */
     destroy() {
         this.timelockGuard.reset(); // Clears the resumeTimer
+        this.replyRatioGuard.reset();
+        this.contactGraphWarmer.reset();
+        this.presenceChoreographer.reset();
         if (this.logging) {
             console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
         }

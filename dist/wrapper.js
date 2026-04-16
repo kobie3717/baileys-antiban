@@ -19,8 +19,12 @@ import { AntiBan } from './antiban.js';
  * Wrap a Baileys socket with anti-ban protection.
  * The returned socket has the same API but sendMessage() is protected.
  */
-export function wrapSocket(sock, config, warmUpState) {
+export function wrapSocket(sock, config, warmUpState, wrapOptions) {
     const antiban = new AntiBan(config, warmUpState);
+    const options = {
+        autoRespondToIncoming: false,
+        ...wrapOptions,
+    };
     // Hook into connection events for health monitoring
     sock.ev.on('connection.update', (update) => {
         if (update.connection === 'close') {
@@ -51,11 +55,38 @@ export function wrapSocket(sock, config, warmUpState) {
             }
         }
     });
-    // Register known chats from incoming messages
+    // Register known chats from incoming messages + handle reply suggestions
     sock.ev.on('messages.upsert', ({ messages }) => {
         for (const msg of messages || []) {
-            if (msg.key?.remoteJid) {
-                antiban.timelock.registerKnownChat(msg.key.remoteJid);
+            const jid = msg.key?.remoteJid;
+            if (!jid)
+                continue;
+            // Register known chat
+            antiban.timelock.registerKnownChat(jid);
+            // Skip self messages
+            const isSelf = msg.key?.fromMe || false;
+            if (isSelf)
+                continue;
+            // Extract message text
+            const msgText = msg.message?.conversation ||
+                msg.message?.extendedTextMessage?.text ||
+                msg.message?.imageMessage?.caption ||
+                msg.message?.videoMessage?.caption ||
+                '';
+            // Handle incoming message (updates reply ratio + contact graph)
+            const replySuggestion = antiban.onIncomingMessage(jid, msgText);
+            // Auto-respond if enabled and suggested
+            if (options.autoRespondToIncoming && replySuggestion.shouldReply && replySuggestion.suggestedText) {
+                // Random delay 3-15s
+                const replyDelay = Math.floor(Math.random() * 12000) + 3000;
+                setTimeout(async () => {
+                    try {
+                        await sock.sendMessage(jid, { text: replySuggestion.suggestedText });
+                    }
+                    catch (error) {
+                        // Silently fail — auto-reply is best-effort
+                    }
+                }, replyDelay);
             }
         }
     });
