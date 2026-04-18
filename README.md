@@ -4,7 +4,7 @@
 [![Node.js Version](https://img.shields.io/node/v/baileys-antiban.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Anti-ban middleware for [Baileys](https://github.com/WhiskeySockets/Baileys) — protect your WhatsApp number with human-like messaging patterns.
+**Transport-agnostic** anti-ban middleware — protect your WhatsApp number with human-like messaging patterns. Works with both [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
 
 ## v1.3 New Features
 
@@ -93,20 +93,43 @@ WhatsApp bans numbers that behave like bots. This library makes your Baileys bot
 - **Contact graph enforcement** (v1.3) — requires handshakes before bulk/group sends
 - **Circadian rhythm** (v1.3) — realistic time-of-day activity patterns
 
+## Supported Transports
+
+**v1.4+** is transport-agnostic and works with any Baileys-compatible WhatsApp library:
+
+- **[Baileys](https://github.com/WhiskeySockets/Baileys)** (Node.js, JavaScript/TypeScript)
+- **[@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs)** (Rust/WASM, Baileys-compatible API)
+
+Both use the same `wrapSocket()` integration. Zero code changes needed.
+
 ## Installation
 
+### With Baileys (Node.js)
+
 ```bash
-npm install baileys-antiban
+npm install baileys baileys-antiban
 ```
 
-Requires Node.js ≥16 and Baileys ≥6.0.0.
+### With baileyrs (Rust/WASM)
+
+```bash
+npm install @oxidezap/baileyrs baileys-antiban
+```
+
+Requires Node.js ≥16.
 
 ## Quick Start
 
 ### Option 1: Wrap Your Socket (Easiest)
 
+Works with both baileys and baileyrs — same code:
+
 ```typescript
+// With baileys:
 import makeWASocket from 'baileys';
+// OR with baileyrs:
+// import { makeWASocket } from '@oxidezap/baileyrs';
+
 import { wrapSocket } from 'baileys-antiban';
 
 const sock = makeWASocket({ /* your config */ });

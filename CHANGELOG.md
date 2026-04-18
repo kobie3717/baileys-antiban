@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-04-18
+
+### Added
+- **Transport-agnostic support** — works with both `baileys` and `@oxidezap/baileyrs` (Rust/WASM WhatsApp library)
+- Both transports now listed as optional peer dependencies
+- GitHub Actions CI workflow with dual-transport matrix testing (Node 18.x + 20.x × baileys + baileyrs)
+- New test suite: `tests/transport-agnostic.test.ts` for duck-typed socket validation
+- Updated JSDoc examples showing usage with both transports
+
+### Changed
+- `peerDependencies` now includes both `baileys` and `@oxidezap/baileyrs` as optional
+- Package description updated to mention transport-agnostic support
+- Wrapper comments clarify baileyrs timelock behavior (no `reachoutTimeLock` events in v0.0.8 — operates in detection-only mode)
+
+### Why
+Positions baileys-antiban as "Switzerland" of WhatsApp anti-ban — works with any Baileys-compatible transport layer. No breaking changes for existing baileys users.
+
 ## [1.3.1] - 2026-04-16
 
 ### Changed

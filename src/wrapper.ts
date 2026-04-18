@@ -1,18 +1,31 @@
 /**
  * Socket Wrapper — Drop-in replacement that wraps sendMessage with anti-ban protection
- * 
- * Usage:
+ *
+ * Works with both baileys and @oxidezap/baileyrs transports.
+ *
+ * Usage with baileys:
  *   import makeWASocket from 'baileys';
  *   import { wrapSocket } from 'baileys-antiban';
- * 
+ *
  *   const sock = makeWASocket({ ... });
  *   const safeSock = wrapSocket(sock);
- * 
+ *
+ * Usage with baileyrs:
+ *   import { makeWASocket } from '@oxidezap/baileyrs';
+ *   import { wrapSocket } from 'baileys-antiban';
+ *
+ *   const sock = makeWASocket({ ... });
+ *   const safeSock = wrapSocket(sock);
+ *
  *   // Use safeSock.sendMessage() — automatically rate-limited and monitored
  *   await safeSock.sendMessage(jid, { text: 'Hello!' });
- *   
+ *
  *   // Check health anytime
  *   console.log(safeSock.antiban.getStats());
+ *
+ * Note: reachoutTimeLock timelock module silently noops on baileyrs until upstream
+ * emits reachoutTimeLock events — confirmed NOT present in baileyrs v0.0.8.
+ * Timelock guard will operate in detection-only mode (relies on 463 errors only).
  */
 
 import { AntiBan, type AntiBanConfig } from './antiban.js';
