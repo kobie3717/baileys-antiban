@@ -15,6 +15,8 @@ export { TimelockGuard, type TimelockGuardConfig, type TimelockState } from './t
 export { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './replyRatio.js';
 export { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats, type ContactState } from './contactGraph.js';
 export { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
+export { RetryReasonTracker, type RetryTrackerConfig, type RetryStats, type RetryReason } from './retryTracker.js';
+export { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';
 export { ContentVariator, type VariatorConfig } from './contentVariator.js';

@@ -20,6 +20,8 @@ import { TimelockGuard } from './timelockGuard.js';
 import { ReplyRatioGuard } from './replyRatio.js';
 import { ContactGraphWarmer } from './contactGraph.js';
 import { PresenceChoreographer } from './presenceChoreographer.js';
+import { RetryReasonTracker } from './retryTracker.js';
+import { PostReconnectThrottle } from './reconnectThrottle.js';
 export class AntiBan {
     rateLimiter;
     warmUp;
@@ -28,6 +30,8 @@ export class AntiBan {
     replyRatioGuard;
     contactGraphWarmer;
     presenceChoreographer;
+    retryTrackerModule;
+    reconnectThrottleModule;
     logging;
     stats = {
         messagesAllowed: 0,
@@ -69,6 +73,19 @@ export class AntiBan {
         this.replyRatioGuard = new ReplyRatioGuard(config.replyRatio);
         this.contactGraphWarmer = new ContactGraphWarmer(config.contactGraph);
         this.presenceChoreographer = new PresenceChoreographer(config.presence);
+        this.retryTrackerModule = new RetryReasonTracker({
+            ...config.retryTracker,
+            onSpiral: (msgId, reason) => {
+                if (this.logging) {
+                    console.log(`[baileys-antiban] ⚠️  Message ${msgId} stuck in retry spiral (${reason})`);
+                }
+                config.retryTracker?.onSpiral?.(msgId, reason);
+            },
+        });
+        this.reconnectThrottleModule = new PostReconnectThrottle({
+            ...config.reconnectThrottle,
+            baselineRatePerMinute: () => this.rateLimiter.getStats().limits.perMinute,
+        });
     }
     /**
      * Check if a message can be sent and get required delay.
@@ -146,6 +163,20 @@ export class AntiBan {
                 health: healthStatus,
             };
         }
+        // Reconnect throttle check
+        const reconnectThrottleDecision = this.reconnectThrottleModule.beforeSend();
+        if (!reconnectThrottleDecision.allowed) {
+            this.stats.messagesBlocked++;
+            if (this.logging) {
+                console.log(`[baileys-antiban] 🔄 BLOCKED — reconnect throttle: ${reconnectThrottleDecision.reason}`);
+            }
+            return {
+                allowed: false,
+                delayMs: reconnectThrottleDecision.retryAfterMs || 0,
+                reason: reconnectThrottleDecision.reason || 'Post-reconnect throttle',
+                health: healthStatus,
+            };
+        }
         // Rate limiter delay
         let delay = await this.rateLimiter.getDelay(recipient, content);
         if (delay === -1) {
@@ -211,12 +242,14 @@ export class AntiBan {
      */
     onDisconnect(reason) {
         this.health.recordDisconnect(reason);
+        this.reconnectThrottleModule.onDisconnect();
     }
     /**
      * Record a successful reconnection
      */
     onReconnect() {
         this.health.recordReconnect();
+        this.reconnectThrottleModule.onReconnect();
     }
     /**
      * Handle incoming message — record in reply ratio + contact graph.
@@ -247,6 +280,12 @@ export class AntiBan {
         if (this.presenceChoreographer['config']?.enabled) {
             stats.presence = this.presenceChoreographer.getStats();
         }
+        if (this.retryTrackerModule['config']?.enabled) {
+            stats.retryTracker = this.retryTrackerModule.getStats();
+        }
+        if (this.reconnectThrottleModule['config']?.enabled) {
+            stats.reconnectThrottle = this.reconnectThrottleModule.getStats();
+        }
         return stats;
     }
     /** Get the timelock guard for direct access */
@@ -264,6 +303,14 @@ export class AntiBan {
     /** Get the presence choreographer for direct access */
     get presence() {
         return this.presenceChoreographer;
+    }
+    /** Get the retry tracker for direct access */
+    get retryTracker() {
+        return this.retryTrackerModule;
+    }
+    /** Get the reconnect throttle for direct access */
+    get reconnectThrottle() {
+        return this.reconnectThrottleModule;
     }
     /**
      * Export warm-up state for persistence between restarts
@@ -299,6 +346,8 @@ export class AntiBan {
         this.replyRatioGuard.reset();
         this.contactGraphWarmer.reset();
         this.presenceChoreographer.reset();
+        this.retryTrackerModule.destroy();
+        this.reconnectThrottleModule.destroy();
         this.stats = { messagesAllowed: 0, messagesBlocked: 0, totalDelayMs: 0 };
         if (this.logging) {
             console.log('[baileys-antiban] 🔄 Reset — starting fresh warm-up');
@@ -313,6 +362,8 @@ export class AntiBan {
         this.replyRatioGuard.reset();
         this.contactGraphWarmer.reset();
         this.presenceChoreographer.reset();
+        this.retryTrackerModule.destroy();
+        this.reconnectThrottleModule.destroy();
         if (this.logging) {
             console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
         }

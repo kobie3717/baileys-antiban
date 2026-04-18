@@ -20,6 +20,10 @@ export { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './
 export { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats, type ContactState } from './contactGraph.js';
 export { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
 
+// v1.5 new modules
+export { RetryReasonTracker, type RetryTrackerConfig, type RetryStats, type RetryReason } from './retryTracker.js';
+export { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
+
 // Socket wrapper
 export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 

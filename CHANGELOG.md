@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-18
+
+### Added
+- **RetryReasonTracker** module: Track message retry reasons and detect retry spirals
+  - Classifies 10 retry reason types (no_session, invalid_key, bad_mac, decryption_failure, server_error_463, server_error_429, timeout, no_route, node_malformed, unknown)
+  - Detects retry spirals when same message retries exceed threshold (default: 3)
+  - Provides stats on total retries, retries by reason, spirals detected, and active retries
+  - Auto-integrates with messages.update events in wrapper
+  - Inspired by whatsapp-rust's protocol/retry.rs module
+- **PostReconnectThrottle** module: Throttle outbound messages after reconnection
+  - Prevents burst-floods on reconnect that trigger WhatsApp rate limits
+  - Configurable ramp-up from initial rate multiplier (default: 10%) to full rate over ramp duration (default: 60s)
+  - Linear ramp with configurable steps (default: 6 steps)
+  - Auto-integrates with connection.update events
+  - Inspired by whatsapp-rust's client/sessions.rs semaphore swap pattern
+- Both modules are opt-in (enabled: false by default) for backward compatibility
+
+### Changed
+- `AntiBan.beforeSend()` now also consults reconnect throttle
+- `AntiBan.onReconnect()` triggers reconnect throttle window
+- `AntiBan.getStats()` includes retry tracker and reconnect throttle stats when enabled
+- Wrapper now tracks message updates for retry classification and clears on successful send
+
 ## [1.4.0] - 2026-04-18
 
 ### Added

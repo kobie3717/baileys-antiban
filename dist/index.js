@@ -17,6 +17,9 @@ export { TimelockGuard } from './timelockGuard.js';
 export { ReplyRatioGuard } from './replyRatio.js';
 export { ContactGraphWarmer } from './contactGraph.js';
 export { PresenceChoreographer } from './presenceChoreographer.js';
+// v1.5 new modules
+export { RetryReasonTracker } from './retryTracker.js';
+export { PostReconnectThrottle } from './reconnectThrottle.js';
 // Socket wrapper
 export { wrapSocket } from './wrapper.js';
 // Optional features

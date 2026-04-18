@@ -63,16 +63,19 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                     });
                 }
             }
-            // Catch 463 errors from message updates
+            // Catch 463 errors from message updates + track retries
             if (events['messages.update']) {
                 const updates = events['messages.update'];
                 for (const update of updates) {
+                    // 463 error detection
                     if (update?.update?.messageStubParameters) {
                         const params = update.update.messageStubParameters;
                         if (params.includes(463) || params.includes('463')) {
                             antiban.timelock.record463Error();
                         }
                     }
+                    // Retry tracking
+                    antiban.retryTracker.onMessageUpdate(update);
                 }
             }
             // Register known chats from incoming messages + handle reply suggestions
@@ -133,15 +136,18 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                 });
             }
         });
-        // Catch 463 errors from message updates
+        // Catch 463 errors from message updates + track retries
         sock.ev.on('messages.update', (updates) => {
             for (const update of updates) {
+                // 463 error detection
                 if (update?.update?.messageStubParameters) {
                     const params = update.update.messageStubParameters;
                     if (params.includes(463) || params.includes('463')) {
                         antiban.timelock.record463Error();
                     }
                 }
+                // Retry tracking
+                antiban.retryTracker.onMessageUpdate(update);
             }
         });
         // Register known chats from incoming messages + handle reply suggestions
@@ -198,6 +204,10 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
             const result = await originalSendMessage(jid, content, options);
             antiban.afterSend(jid, text);
             antiban.timelock.registerKnownChat(jid);
+            // Clear retry tracking on successful send
+            if (result?.key?.id) {
+                antiban.retryTracker.clear(result.key.id);
+            }
             return result;
         }
         catch (error) {

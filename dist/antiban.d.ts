@@ -20,6 +20,8 @@ import { TimelockGuard, type TimelockGuardConfig } from './timelockGuard.js';
 import { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './replyRatio.js';
 import { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats } from './contactGraph.js';
 import { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
+import { RetryReasonTracker, type RetryTrackerConfig, type RetryStats } from './retryTracker.js';
+import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 export interface AntiBanConfig {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
@@ -28,6 +30,8 @@ export interface AntiBanConfig {
     replyRatio?: Partial<ReplyRatioConfig>;
     contactGraph?: Partial<ContactGraphConfig>;
     presence?: Partial<PresenceChoreographerConfig>;
+    retryTracker?: Partial<RetryTrackerConfig>;
+    reconnectThrottle?: Partial<ReconnectThrottleConfig>;
     /** Log warnings and blocks to console (default: true) */
     logging?: boolean;
 }
@@ -48,6 +52,8 @@ export interface AntiBanStats {
     replyRatio?: ReplyRatioStats;
     contactGraph?: ContactGraphStats;
     presence?: PresenceChoreographerStats;
+    retryTracker?: RetryStats | null;
+    reconnectThrottle?: ReconnectThrottleStats | null;
 }
 export declare class AntiBan {
     private rateLimiter;
@@ -57,6 +63,8 @@ export declare class AntiBan {
     private replyRatioGuard;
     private contactGraphWarmer;
     private presenceChoreographer;
+    private retryTrackerModule;
+    private reconnectThrottleModule;
     private logging;
     private stats;
     constructor(config?: AntiBanConfig, warmUpState?: WarmUpState);
@@ -102,6 +110,10 @@ export declare class AntiBan {
     get contactGraph(): ContactGraphWarmer;
     /** Get the presence choreographer for direct access */
     get presence(): PresenceChoreographer;
+    /** Get the retry tracker for direct access */
+    get retryTracker(): RetryReasonTracker;
+    /** Get the reconnect throttle for direct access */
+    get reconnectThrottle(): PostReconnectThrottle;
     /**
      * Export warm-up state for persistence between restarts
      */

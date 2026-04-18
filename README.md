@@ -6,7 +6,62 @@
 
 **Transport-agnostic** anti-ban middleware — protect your WhatsApp number with human-like messaging patterns. Works with both [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
 
-## v1.3 New Features
+## v1.5 New Features
+
+### RetryReasonTracker
+Tracks message retry reasons and detects retry spirals (when the same message keeps failing). Inspired by whatsapp-rust's protocol/retry.rs module.
+
+```typescript
+import { AntiBan } from 'baileys-antiban';
+
+const antiban = new AntiBan({
+  retryTracker: {
+    enabled: true,
+    maxRetries: 5,           // Max retries before considering a message failed
+    spiralThreshold: 3,      // Retries before warning about retry spiral
+    onSpiral: (msgId, reason) => {
+      console.warn(`Message ${msgId} stuck in retry spiral: ${reason}`);
+    },
+  },
+});
+
+// Stats show retry patterns
+const stats = antiban.getStats().retryTracker;
+console.log(stats.totalRetries);         // Total retries across all messages
+console.log(stats.byReason.timeout);     // Retries due to timeout
+console.log(stats.spiralsDetected);      // Messages stuck in retry loops
+console.log(stats.activeRetries);        // Messages currently retrying
+```
+
+**Retry reasons tracked**: no_session, invalid_key, bad_mac, decryption_failure, server_error_463, server_error_429, timeout, no_route, node_malformed, unknown
+
+### PostReconnectThrottle
+Throttles outbound messages after reconnection to prevent burst-floods that trigger rate limits. Inspired by whatsapp-rust's client/sessions.rs semaphore swap pattern.
+
+```typescript
+const antiban = new AntiBan({
+  reconnectThrottle: {
+    enabled: true,
+    rampDurationMs: 60_000,       // 60s ramp-up to full rate
+    initialRateMultiplier: 0.1,   // Start at 10% of normal rate
+    rampSteps: 6,                 // 10% → 25% → 50% → 75% → 90% → 100%
+  },
+});
+
+// After reconnect, sends are automatically throttled for 60 seconds
+// Ramps from 10% rate to 100% rate linearly over 6 steps
+
+// Stats show throttle state
+const stats = antiban.getStats().reconnectThrottle;
+console.log(stats.isThrottled);          // Currently throttled?
+console.log(stats.currentMultiplier);    // 0.1 to 1.0
+console.log(stats.remainingMs);          // Time until full rate
+console.log(stats.throttledSendCount);   // Sends gated since reconnect
+```
+
+**Why?** When WhatsApp reconnects after a disconnection, sending messages at full rate immediately can trigger rate limit alarms. The reconnect throttle gradually ramps up sending rate over 60 seconds, mimicking how a human would resume messaging after their internet came back.
+
+## v1.3 Features
 
 ### ReplyRatioGuard
 Tracks outbound:inbound message ratio per contact. Blocks sends to non-responsive contacts to avoid "spray-and-pray" ban patterns. Optionally suggests auto-replies to maintain healthy engagement.
@@ -92,6 +147,8 @@ WhatsApp bans numbers that behave like bots. This library makes your Baileys bot
 - **Reply ratio tracking** (v1.3) — blocks sends to non-responsive contacts
 - **Contact graph enforcement** (v1.3) — requires handshakes before bulk/group sends
 - **Circadian rhythm** (v1.3) — realistic time-of-day activity patterns
+- **Retry tracking** (v1.5) — detect retry spirals and classify retry reasons
+- **Reconnect throttle** (v1.5) — prevent burst-floods after reconnection
 
 ## Supported Transports
 
@@ -222,6 +279,17 @@ const antiban = new AntiBan({
       // Called when timelock expires or is manually lifted
       console.log('Timelock lifted — resuming normal operation');
     },
+  },
+  retryTracker: {
+    enabled: false,                  // Opt-in (default: false)
+    maxRetries: 5,
+    spiralThreshold: 3,
+  },
+  reconnectThrottle: {
+    enabled: false,                  // Opt-in (default: false)
+    rampDurationMs: 60_000,
+    initialRateMultiplier: 0.1,
+    rampSteps: 6,
   },
   logging: true, // Console logging (default: true)
 });
