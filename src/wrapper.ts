@@ -56,76 +56,157 @@ export function wrapSocket<T extends WASocket>(
     ...wrapOptions,
   };
 
-  // Hook into connection events for health monitoring
-  sock.ev.on('connection.update', (update: any) => {
-    if (update.connection === 'close') {
-      const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
-      antiban.onDisconnect(reason);
-      antiban.destroy(); // Clean up all timers
-    }
-    if (update.connection === 'open') {
-      antiban.onReconnect();
-    }
-    // Reachout timelock detection
-    if (update.reachoutTimeLock) {
-      antiban.timelock.onTimelockUpdate({
-        isActive: update.reachoutTimeLock.isActive,
-        timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
-        enforcementType: update.reachoutTimeLock.enforcementType,
-      });
-    }
-  });
-
-  // Catch 463 errors from message updates
-  sock.ev.on('messages.update', (updates: any[]) => {
-    for (const update of updates) {
-      if (update?.update?.messageStubParameters) {
-        const params = update.update.messageStubParameters;
-        if (params.includes(463) || params.includes('463')) {
-          antiban.timelock.record463Error();
+  // Hook into Baileys events for health monitoring
+  // Prefer ev.process() (Baileys ≥ late 2022) for batched event handling
+  // Fall back to ev.on() for older versions
+  if (typeof sock.ev.process === 'function') {
+    sock.ev.process(async (events: any) => {
+      // Handle connection updates
+      if (events['connection.update']) {
+        const update = events['connection.update'];
+        if (update.connection === 'close') {
+          const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
+          antiban.onDisconnect(reason);
+          antiban.destroy(); // Clean up all timers
+        }
+        if (update.connection === 'open') {
+          antiban.onReconnect();
+        }
+        // Reachout timelock detection
+        if (update.reachoutTimeLock) {
+          antiban.timelock.onTimelockUpdate({
+            isActive: update.reachoutTimeLock.isActive,
+            timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
+            enforcementType: update.reachoutTimeLock.enforcementType,
+          });
         }
       }
-    }
-  });
 
-  // Register known chats from incoming messages + handle reply suggestions
-  sock.ev.on('messages.upsert', ({ messages }: any) => {
-    for (const msg of messages || []) {
-      const jid = msg.key?.remoteJid;
-      if (!jid) continue;
-
-      // Register known chat
-      antiban.timelock.registerKnownChat(jid);
-
-      // Skip self messages
-      const isSelf = msg.key?.fromMe || false;
-      if (isSelf) continue;
-
-      // Extract message text
-      const msgText =
-        msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption ||
-        msg.message?.videoMessage?.caption ||
-        '';
-
-      // Handle incoming message (updates reply ratio + contact graph)
-      const replySuggestion = antiban.onIncomingMessage(jid, msgText);
-
-      // Auto-respond if enabled and suggested
-      if (options.autoRespondToIncoming && replySuggestion.shouldReply && replySuggestion.suggestedText) {
-        // Random delay 3-15s
-        const replyDelay = Math.floor(Math.random() * 12000) + 3000;
-        setTimeout(async () => {
-          try {
-            await sock.sendMessage(jid, { text: replySuggestion.suggestedText });
-          } catch (error) {
-            // Silently fail — auto-reply is best-effort
+      // Catch 463 errors from message updates
+      if (events['messages.update']) {
+        const updates = events['messages.update'];
+        for (const update of updates) {
+          if (update?.update?.messageStubParameters) {
+            const params = update.update.messageStubParameters;
+            if (params.includes(463) || params.includes('463')) {
+              antiban.timelock.record463Error();
+            }
           }
-        }, replyDelay);
+        }
       }
-    }
-  });
+
+      // Register known chats from incoming messages + handle reply suggestions
+      if (events['messages.upsert']) {
+        const { messages } = events['messages.upsert'];
+        for (const msg of messages || []) {
+          const jid = msg.key?.remoteJid;
+          if (!jid) continue;
+
+          // Register known chat
+          antiban.timelock.registerKnownChat(jid);
+
+          // Skip self messages
+          const isSelf = msg.key?.fromMe || false;
+          if (isSelf) continue;
+
+          // Extract message text
+          const msgText =
+            msg.message?.conversation ||
+            msg.message?.extendedTextMessage?.text ||
+            msg.message?.imageMessage?.caption ||
+            msg.message?.videoMessage?.caption ||
+            '';
+
+          // Handle incoming message (updates reply ratio + contact graph)
+          const replySuggestion = antiban.onIncomingMessage(jid, msgText);
+
+          // Auto-respond if enabled and suggested
+          if (options.autoRespondToIncoming && replySuggestion.shouldReply && replySuggestion.suggestedText) {
+            // Random delay 3-15s
+            const replyDelay = Math.floor(Math.random() * 12000) + 3000;
+            setTimeout(async () => {
+              try {
+                await sock.sendMessage(jid, { text: replySuggestion.suggestedText });
+              } catch (error) {
+                // Silently fail — auto-reply is best-effort
+              }
+            }, replyDelay);
+          }
+        }
+      }
+    });
+  } else {
+    // Fallback to ev.on() for older Baileys versions
+    sock.ev.on('connection.update', (update: any) => {
+      if (update.connection === 'close') {
+        const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
+        antiban.onDisconnect(reason);
+        antiban.destroy(); // Clean up all timers
+      }
+      if (update.connection === 'open') {
+        antiban.onReconnect();
+      }
+      // Reachout timelock detection
+      if (update.reachoutTimeLock) {
+        antiban.timelock.onTimelockUpdate({
+          isActive: update.reachoutTimeLock.isActive,
+          timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
+          enforcementType: update.reachoutTimeLock.enforcementType,
+        });
+      }
+    });
+
+    // Catch 463 errors from message updates
+    sock.ev.on('messages.update', (updates: any[]) => {
+      for (const update of updates) {
+        if (update?.update?.messageStubParameters) {
+          const params = update.update.messageStubParameters;
+          if (params.includes(463) || params.includes('463')) {
+            antiban.timelock.record463Error();
+          }
+        }
+      }
+    });
+
+    // Register known chats from incoming messages + handle reply suggestions
+    sock.ev.on('messages.upsert', ({ messages }: any) => {
+      for (const msg of messages || []) {
+        const jid = msg.key?.remoteJid;
+        if (!jid) continue;
+
+        // Register known chat
+        antiban.timelock.registerKnownChat(jid);
+
+        // Skip self messages
+        const isSelf = msg.key?.fromMe || false;
+        if (isSelf) continue;
+
+        // Extract message text
+        const msgText =
+          msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption ||
+          msg.message?.videoMessage?.caption ||
+          '';
+
+        // Handle incoming message (updates reply ratio + contact graph)
+        const replySuggestion = antiban.onIncomingMessage(jid, msgText);
+
+        // Auto-respond if enabled and suggested
+        if (options.autoRespondToIncoming && replySuggestion.shouldReply && replySuggestion.suggestedText) {
+          // Random delay 3-15s
+          const replyDelay = Math.floor(Math.random() * 12000) + 3000;
+          setTimeout(async () => {
+            try {
+              await sock.sendMessage(jid, { text: replySuggestion.suggestedText });
+            } catch (error) {
+              // Silently fail — auto-reply is best-effort
+            }
+          }, replyDelay);
+        }
+      }
+    });
+  }
 
   // Create proxy that intercepts sendMessage
   const originalSendMessage = sock.sendMessage.bind(sock);

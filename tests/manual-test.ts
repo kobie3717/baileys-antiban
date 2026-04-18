@@ -11,6 +11,7 @@ import { AntiBan } from '../src/antiban.js';
 import { ReplyRatioGuard } from '../src/replyRatio.js';
 import { ContactGraphWarmer } from '../src/contactGraph.js';
 import { PresenceChoreographer } from '../src/presenceChoreographer.js';
+import { wrapSocket, type WASocket } from '../src/wrapper.js';
 
 async function testRateLimiter() {
   console.log('\n=== Testing RateLimiter ===');
@@ -342,6 +343,83 @@ async function testIntegrationAllFeatures() {
   console.log('✅ Integration with all v1.3 features passed');
 }
 
+async function testWrapperEventHandling() {
+  console.log('\n=== Testing Wrapper ev.process() and ev.on() Fallback ===');
+
+  // Mock socket with ev.process() support (modern Baileys)
+  const createMockSocket = (hasProcess: boolean): WASocket => {
+    const eventHandlers: Map<string, Function[]> = new Map();
+    let processHandler: Function | null = null;
+
+    return {
+      sendMessage: async (jid: string, content: any) => {
+        return { key: { id: 'mock' } };
+      },
+      ev: {
+        on: (event: string, handler: Function) => {
+          if (!eventHandlers.has(event)) {
+            eventHandlers.set(event, []);
+          }
+          eventHandlers.get(event)!.push(handler);
+        },
+        process: hasProcess ? (handler: Function) => {
+          processHandler = handler;
+          return () => {}; // Cleanup function
+        } : undefined,
+        emit: (event: string, data: any) => {
+          const handlers = eventHandlers.get(event);
+          if (handlers) {
+            handlers.forEach(h => h(data));
+          }
+        },
+        emitBatch: async (events: Record<string, any>) => {
+          if (processHandler) {
+            await processHandler(events);
+          }
+        },
+      },
+    };
+  };
+
+  // Test with ev.process() (modern Baileys)
+  console.log('\nTesting with ev.process() (modern Baileys):');
+  const modernSocket = createMockSocket(true);
+  const wrappedModern = wrapSocket(modernSocket);
+
+  // Emit batched events
+  await (modernSocket.ev as any).emitBatch({
+    'connection.update': { connection: 'open' },
+    'messages.upsert': {
+      messages: [{
+        key: { remoteJid: 'test@s.whatsapp.net', fromMe: false },
+        message: { conversation: 'Hello!' },
+      }],
+    },
+  });
+
+  const modernStats = wrappedModern.antiban.getStats();
+  console.log(`Modern socket stats: connections=${modernStats.health.totalConnections}, received=${modernStats.replyRatio?.globalReceived || 0}`);
+
+  // Test with ev.on() fallback (older Baileys)
+  console.log('\nTesting with ev.on() fallback (older Baileys):');
+  const legacySocket = createMockSocket(false);
+  const wrappedLegacy = wrapSocket(legacySocket);
+
+  // Emit individual events
+  (legacySocket.ev as any).emit('connection.update', { connection: 'open' });
+  (legacySocket.ev as any).emit('messages.upsert', {
+    messages: [{
+      key: { remoteJid: 'test@s.whatsapp.net', fromMe: false },
+      message: { conversation: 'Hello from legacy!' },
+    }],
+  });
+
+  const legacyStats = wrappedLegacy.antiban.getStats();
+  console.log(`Legacy socket stats: connections=${legacyStats.health.totalConnections}, received=${legacyStats.replyRatio?.globalReceived || 0}`);
+
+  console.log('✅ Wrapper event handling tests passed');
+}
+
 async function runAllTests() {
   console.log('Starting manual tests...\n');
 
@@ -354,6 +432,7 @@ async function runAllTests() {
     await testContactGraphWarmer();
     await testPresenceChoreographer();
     await testIntegrationAllFeatures();
+    await testWrapperEventHandling();
 
     console.log('\n✅ ALL TESTS PASSED');
   } catch (error) {
