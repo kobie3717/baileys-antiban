@@ -22,6 +22,8 @@ import { ContactGraphWarmer } from './contactGraph.js';
 import { PresenceChoreographer } from './presenceChoreographer.js';
 import { RetryReasonTracker } from './retryTracker.js';
 import { PostReconnectThrottle } from './reconnectThrottle.js';
+import { LidResolver } from './lidResolver.js';
+import { JidCanonicalizer } from './jidCanonicalizer.js';
 export class AntiBan {
     rateLimiter;
     warmUp;
@@ -32,6 +34,8 @@ export class AntiBan {
     presenceChoreographer;
     retryTrackerModule;
     reconnectThrottleModule;
+    lidResolverModule = null;
+    jidCanonicalizerModule = null;
     logging;
     stats = {
         messagesAllowed: 0,
@@ -86,6 +90,30 @@ export class AntiBan {
             ...config.reconnectThrottle,
             baselineRatePerMinute: () => this.rateLimiter.getStats().limits.perMinute,
         });
+        // Initialize LID resolver and canonicalizer if configured
+        // If jidCanonicalizer is enabled but no resolver provided, create standalone resolver
+        if (config.jidCanonicalizer?.enabled) {
+            // Create or use provided resolver
+            if (config.jidCanonicalizer.resolver) {
+                // User provided their own resolver
+                this.jidCanonicalizerModule = new JidCanonicalizer(config.jidCanonicalizer);
+                this.lidResolverModule = config.jidCanonicalizer.resolver;
+            }
+            else {
+                // Create new resolver using lidResolver config if provided
+                const resolverConfig = config.lidResolver || config.jidCanonicalizer.resolverConfig;
+                const resolver = new LidResolver(resolverConfig);
+                this.lidResolverModule = resolver;
+                this.jidCanonicalizerModule = new JidCanonicalizer({
+                    ...config.jidCanonicalizer,
+                    resolver,
+                });
+            }
+        }
+        else if (config.lidResolver) {
+            // Standalone resolver without canonicalizer
+            this.lidResolverModule = new LidResolver(config.lidResolver);
+        }
     }
     /**
      * Check if a message can be sent and get required delay.
@@ -286,6 +314,12 @@ export class AntiBan {
         if (this.reconnectThrottleModule['config']?.enabled) {
             stats.reconnectThrottle = this.reconnectThrottleModule.getStats();
         }
+        if (this.lidResolverModule) {
+            stats.lidResolver = this.lidResolverModule.getStats();
+        }
+        if (this.jidCanonicalizerModule) {
+            stats.jidCanonicalizer = this.jidCanonicalizerModule.getStats();
+        }
         return stats;
     }
     /** Get the timelock guard for direct access */
@@ -311,6 +345,14 @@ export class AntiBan {
     /** Get the reconnect throttle for direct access */
     get reconnectThrottle() {
         return this.reconnectThrottleModule;
+    }
+    /** Get the LID resolver for direct access */
+    get lidResolver() {
+        return this.lidResolverModule;
+    }
+    /** Get the JID canonicalizer for direct access */
+    get jidCanonicalizer() {
+        return this.jidCanonicalizerModule;
     }
     /**
      * Export warm-up state for persistence between restarts
@@ -364,6 +406,8 @@ export class AntiBan {
         this.presenceChoreographer.reset();
         this.retryTrackerModule.destroy();
         this.reconnectThrottleModule.destroy();
+        this.jidCanonicalizerModule?.destroy();
+        this.lidResolverModule?.destroy();
         if (this.logging) {
             console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
         }

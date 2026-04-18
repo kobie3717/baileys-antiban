@@ -61,6 +61,58 @@ console.log(stats.throttledSendCount);   // Sends gated since reconnect
 
 **Why?** When WhatsApp reconnects after a disconnection, sending messages at full rate immediately can trigger rate limit alarms. The reconnect throttle gradually ramps up sending rate over 60 seconds, mimicking how a human would resume messaging after their internet came back.
 
+## LID / Phone Number Canonicalization
+
+WhatsApp migrated to **Linked Identity (LID)** in 2024. A contact now has two JID forms:
+- Phone number: `27825651069@s.whatsapp.net`
+- LID: `123456789@lid`
+
+Messages can arrive under either form. If an encryption session was established under one form and a message arrives under the other, decryption fails → **"Bad MAC / No Session / Invalid PreKey"** errors (the #1 reported Baileys bug).
+
+baileys-antiban v1.6+ provides **middleware-layer mitigation** via two new modules:
+
+```typescript
+import { wrapSocket } from 'baileys-antiban';
+
+const sock = makeWASocket({ ... });
+const safeSock = wrapSocket(sock, {
+  jidCanonicalizer: {
+    enabled: true,  // Enable LID/PN canonicalization
+    canonical: 'pn', // Normalize to phone-number form (default)
+  },
+});
+
+// That's it! Incoming events auto-learn LID↔PN mappings.
+// Outbound sends are auto-canonicalized to phone-number form.
+```
+
+**Advanced: Standalone Resolver**
+
+```typescript
+import { LidResolver } from 'baileys-antiban';
+
+const resolver = new LidResolver({
+  canonical: 'pn',
+  maxEntries: 10_000, // LRU cache size
+  persistence: {
+    load: async () => JSON.parse(await fs.readFile('lid-map.json', 'utf8')),
+    save: async (map) => fs.writeFile('lid-map.json', JSON.stringify(map)),
+  },
+});
+
+// Learn from message events
+resolver.learn({
+  lid: '123456789@lid',
+  pn: '27825651069@s.whatsapp.net',
+});
+
+// Resolve canonical form
+const canonical = resolver.resolveCanonical('123456789@lid');
+// → '27825651069@s.whatsapp.net'
+```
+
+**Note:** This is a middleware-layer workaround. The root fix lives inside Baileys' crypto pipeline ([PR #2372](https://github.com/WhiskeySockets/Baileys/pull/2372)).
+
 ## v1.3 Features
 
 ### ReplyRatioGuard

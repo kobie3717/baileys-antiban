@@ -17,6 +17,8 @@ export { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats, ty
 export { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
 export { RetryReasonTracker, type RetryTrackerConfig, type RetryStats, type RetryReason } from './retryTracker.js';
 export { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
+export { LidResolver, type LidResolverConfig, type LidResolverStats, type LidMapping } from './lidResolver.js';
+export { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';
 export { ContentVariator, type VariatorConfig } from './contentVariator.js';

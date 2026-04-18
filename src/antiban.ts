@@ -23,6 +23,8 @@ import { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats } f
 import { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
 import { RetryReasonTracker, type RetryTrackerConfig, type RetryStats } from './retryTracker.js';
 import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
+import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
+import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 
 export interface AntiBanConfig {
   rateLimiter?: Partial<RateLimiterConfig>;
@@ -34,6 +36,8 @@ export interface AntiBanConfig {
   presence?: Partial<PresenceChoreographerConfig>;
   retryTracker?: Partial<RetryTrackerConfig>;
   reconnectThrottle?: Partial<ReconnectThrottleConfig>;
+  lidResolver?: LidResolverConfig;      // if set, creates a resolver accessible at antiban.lidResolver
+  jidCanonicalizer?: JidCanonicalizerConfig;  // opt-in module
   /** Log warnings and blocks to console (default: true) */
   logging?: boolean;
 }
@@ -58,6 +62,8 @@ export interface AntiBanStats {
   presence?: PresenceChoreographerStats;
   retryTracker?: RetryStats | null;
   reconnectThrottle?: ReconnectThrottleStats | null;
+  lidResolver?: LidResolverStats | null;
+  jidCanonicalizer?: JidCanonicalizerStats | null;
 }
 
 export class AntiBan {
@@ -70,6 +76,8 @@ export class AntiBan {
   private presenceChoreographer: PresenceChoreographer;
   private retryTrackerModule: RetryReasonTracker;
   private reconnectThrottleModule: PostReconnectThrottle;
+  private lidResolverModule: LidResolver | null = null;
+  private jidCanonicalizerModule: JidCanonicalizer | null = null;
   private logging: boolean;
 
   private stats = {
@@ -126,6 +134,29 @@ export class AntiBan {
       ...config.reconnectThrottle,
       baselineRatePerMinute: () => this.rateLimiter.getStats().limits.perMinute,
     });
+
+    // Initialize LID resolver and canonicalizer if configured
+    // If jidCanonicalizer is enabled but no resolver provided, create standalone resolver
+    if (config.jidCanonicalizer?.enabled) {
+      // Create or use provided resolver
+      if (config.jidCanonicalizer.resolver) {
+        // User provided their own resolver
+        this.jidCanonicalizerModule = new JidCanonicalizer(config.jidCanonicalizer);
+        this.lidResolverModule = config.jidCanonicalizer.resolver;
+      } else {
+        // Create new resolver using lidResolver config if provided
+        const resolverConfig = config.lidResolver || config.jidCanonicalizer.resolverConfig;
+        const resolver = new LidResolver(resolverConfig);
+        this.lidResolverModule = resolver;
+        this.jidCanonicalizerModule = new JidCanonicalizer({
+          ...config.jidCanonicalizer,
+          resolver,
+        });
+      }
+    } else if (config.lidResolver) {
+      // Standalone resolver without canonicalizer
+      this.lidResolverModule = new LidResolver(config.lidResolver);
+    }
   }
 
   /**
@@ -347,6 +378,12 @@ export class AntiBan {
     if (this.reconnectThrottleModule['config']?.enabled) {
       stats.reconnectThrottle = this.reconnectThrottleModule.getStats();
     }
+    if (this.lidResolverModule) {
+      stats.lidResolver = this.lidResolverModule.getStats();
+    }
+    if (this.jidCanonicalizerModule) {
+      stats.jidCanonicalizer = this.jidCanonicalizerModule.getStats();
+    }
 
     return stats;
   }
@@ -379,6 +416,16 @@ export class AntiBan {
   /** Get the reconnect throttle for direct access */
   get reconnectThrottle(): PostReconnectThrottle {
     return this.reconnectThrottleModule;
+  }
+
+  /** Get the LID resolver for direct access */
+  get lidResolver(): LidResolver | null {
+    return this.lidResolverModule;
+  }
+
+  /** Get the JID canonicalizer for direct access */
+  get jidCanonicalizer(): JidCanonicalizer | null {
+    return this.jidCanonicalizerModule;
   }
 
   /**
@@ -437,6 +484,8 @@ export class AntiBan {
     this.presenceChoreographer.reset();
     this.retryTrackerModule.destroy();
     this.reconnectThrottleModule.destroy();
+    this.jidCanonicalizerModule?.destroy();
+    this.lidResolverModule?.destroy();
     if (this.logging) {
       console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
     }

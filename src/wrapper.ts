@@ -95,7 +95,7 @@ export function wrapSocket<T extends WASocket>(
         }
       }
 
-      // Catch 463 errors from message updates + track retries
+      // Catch 463 errors from message updates + track retries + learn LID mappings
       if (events['messages.update']) {
         const updates = events['messages.update'];
         for (const update of updates) {
@@ -109,11 +109,17 @@ export function wrapSocket<T extends WASocket>(
           // Retry tracking
           antiban.retryTracker.onMessageUpdate(update);
         }
+        // LID canonicalizer learning
+        antiban.jidCanonicalizer?.onMessageUpdate(updates);
       }
 
-      // Register known chats from incoming messages + handle reply suggestions
+      // Register known chats from incoming messages + handle reply suggestions + learn LID mappings
       if (events['messages.upsert']) {
         const { messages } = events['messages.upsert'];
+
+        // Learn LID mappings FIRST (before any other processing)
+        antiban.jidCanonicalizer?.onIncomingEvent(events['messages.upsert']);
+
         for (const msg of messages || []) {
           const jid = msg.key?.remoteJid;
           if (!jid) continue;
@@ -172,7 +178,7 @@ export function wrapSocket<T extends WASocket>(
       }
     });
 
-    // Catch 463 errors from message updates + track retries
+    // Catch 463 errors from message updates + track retries + learn LID mappings
     sock.ev.on('messages.update', (updates: any[]) => {
       for (const update of updates) {
         // 463 error detection
@@ -185,10 +191,17 @@ export function wrapSocket<T extends WASocket>(
         // Retry tracking
         antiban.retryTracker.onMessageUpdate(update);
       }
+      // LID canonicalizer learning
+      antiban.jidCanonicalizer?.onMessageUpdate(updates);
     });
 
-    // Register known chats from incoming messages + handle reply suggestions
-    sock.ev.on('messages.upsert', ({ messages }: any) => {
+    // Register known chats from incoming messages + handle reply suggestions + learn LID mappings
+    sock.ev.on('messages.upsert', (upsert: any) => {
+      const { messages } = upsert;
+
+      // Learn LID mappings FIRST (before any other processing)
+      antiban.jidCanonicalizer?.onIncomingEvent(upsert);
+
       for (const msg of messages || []) {
         const jid = msg.key?.remoteJid;
         if (!jid) continue;
@@ -229,12 +242,24 @@ export function wrapSocket<T extends WASocket>(
 
   // Create proxy that intercepts sendMessage
   const originalSendMessage = sock.sendMessage.bind(sock);
-  
+
   const wrappedSendMessage = async (jid: string, content: any, options?: any) => {
+    /**
+     * LID/PN Canonicalization — Normalize JID to canonical form
+     *
+     * This mitigates the LID/PN race that causes "Bad MAC / No Session / Invalid PreKey"
+     * errors (Baileys #1769, our PR #2372). When a message event arrives under one form
+     * (e.g. LID) but the crypto session was established under another (e.g. PN), decryption
+     * fails. By normalizing all outbound targets to a single form, we reduce this race.
+     *
+     * This is middleware-layer mitigation only. Root fix requires PR #2372 merged upstream.
+     */
+    const canonicalJid = antiban.jidCanonicalizer?.canonicalizeTarget(jid) || jid;
+
     // Extract text content for rate limiter analysis
     const text = content?.text || content?.caption || content?.image?.caption || '';
 
-    const decision = await antiban.beforeSend(jid, text);
+    const decision = await antiban.beforeSend(canonicalJid, text);
 
     if (!decision.allowed) {
       throw new Error(`[baileys-antiban] Message blocked: ${decision.reason}`);
@@ -245,11 +270,11 @@ export function wrapSocket<T extends WASocket>(
       await new Promise(resolve => setTimeout(resolve, decision.delayMs));
     }
 
-    // Send message
+    // Send message (using canonical JID)
     try {
-      const result = await originalSendMessage(jid, content, options);
-      antiban.afterSend(jid, text);
-      antiban.timelock.registerKnownChat(jid);
+      const result = await originalSendMessage(canonicalJid, content, options);
+      antiban.afterSend(canonicalJid, text);
+      antiban.timelock.registerKnownChat(canonicalJid);
       // Clear retry tracking on successful send
       if (result?.key?.id) {
         antiban.retryTracker.clear(result.key.id);

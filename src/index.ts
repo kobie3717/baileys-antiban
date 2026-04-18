@@ -24,6 +24,10 @@ export { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceC
 export { RetryReasonTracker, type RetryTrackerConfig, type RetryStats, type RetryReason } from './retryTracker.js';
 export { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 
+// v1.6 new modules
+export { LidResolver, type LidResolverConfig, type LidResolverStats, type LidMapping } from './lidResolver.js';
+export { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
+
 // Socket wrapper
 export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 

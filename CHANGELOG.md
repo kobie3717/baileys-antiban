@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-04-18
+
+### Added
+- **LID/PN Race Condition Mitigation** — New modules to address the #1 reported Baileys bug: "Bad MAC / No Session / Invalid PreKey" errors caused by WhatsApp's Linked Identity (LID) migration
+  - `LidResolver` — Standalone utility for maintaining bidirectional LID↔PN mappings learned from message events
+  - `JidCanonicalizer` — Opt-in middleware that auto-learns from incoming events and canonicalizes outbound send targets to a single form (phone number by default)
+  - Both modules default to **disabled** — backward compatible, zero behavior change for existing users
+  - Middleware-layer mitigation only — root fix still requires [PR #2372](https://github.com/WhiskeySockets/Baileys/pull/2372) merged upstream
+  - Comprehensive test coverage: 56 new tests (29 LidResolver + 18 JidCanonicalizer + 9 integration)
+
+### Changed
+- `AntiBan` class now exposes `lidResolver` and `jidCanonicalizer` getters for direct access
+- `AntiBanConfig` extended with `lidResolver` and `jidCanonicalizer` config options
+- `AntiBanStats` includes `lidResolver` and `jidCanonicalizer` stats when enabled
+- Wrapper's `sendMessage` now canonicalizes JID before all rate-limit/timelock/graph checks
+- `messages.upsert` and `messages.update` handlers now auto-learn LID mappings when canonicalizer enabled
+
+### Technical Details
+- LRU eviction at configurable `maxEntries` (default 10,000)
+- Optional persistence hooks for cross-restart state survival
+- Device suffix stripping (`:N` in JIDs) for robust matching
+- Supports both `canonical: 'pn'` (phone number) and `canonical: 'lid'` modes
+- Shared resolver mode allows multiple canonicalizers to reference same mapping state
+
 ## [1.5.0] - 2026-04-18
 
 ### Added

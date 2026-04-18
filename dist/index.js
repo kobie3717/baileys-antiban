@@ -20,6 +20,9 @@ export { PresenceChoreographer } from './presenceChoreographer.js';
 // v1.5 new modules
 export { RetryReasonTracker } from './retryTracker.js';
 export { PostReconnectThrottle } from './reconnectThrottle.js';
+// v1.6 new modules
+export { LidResolver } from './lidResolver.js';
+export { JidCanonicalizer } from './jidCanonicalizer.js';
 // Socket wrapper
 export { wrapSocket } from './wrapper.js';
 // Optional features

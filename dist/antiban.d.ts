@@ -22,6 +22,8 @@ import { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats } f
 import { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
 import { RetryReasonTracker, type RetryTrackerConfig, type RetryStats } from './retryTracker.js';
 import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
+import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
+import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 export interface AntiBanConfig {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
@@ -32,6 +34,8 @@ export interface AntiBanConfig {
     presence?: Partial<PresenceChoreographerConfig>;
     retryTracker?: Partial<RetryTrackerConfig>;
     reconnectThrottle?: Partial<ReconnectThrottleConfig>;
+    lidResolver?: LidResolverConfig;
+    jidCanonicalizer?: JidCanonicalizerConfig;
     /** Log warnings and blocks to console (default: true) */
     logging?: boolean;
 }
@@ -54,6 +58,8 @@ export interface AntiBanStats {
     presence?: PresenceChoreographerStats;
     retryTracker?: RetryStats | null;
     reconnectThrottle?: ReconnectThrottleStats | null;
+    lidResolver?: LidResolverStats | null;
+    jidCanonicalizer?: JidCanonicalizerStats | null;
 }
 export declare class AntiBan {
     private rateLimiter;
@@ -65,6 +71,8 @@ export declare class AntiBan {
     private presenceChoreographer;
     private retryTrackerModule;
     private reconnectThrottleModule;
+    private lidResolverModule;
+    private jidCanonicalizerModule;
     private logging;
     private stats;
     constructor(config?: AntiBanConfig, warmUpState?: WarmUpState);
@@ -114,6 +122,10 @@ export declare class AntiBan {
     get retryTracker(): RetryReasonTracker;
     /** Get the reconnect throttle for direct access */
     get reconnectThrottle(): PostReconnectThrottle;
+    /** Get the LID resolver for direct access */
+    get lidResolver(): LidResolver | null;
+    /** Get the JID canonicalizer for direct access */
+    get jidCanonicalizer(): JidCanonicalizer | null;
     /**
      * Export warm-up state for persistence between restarts
      */
