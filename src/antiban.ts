@@ -25,6 +25,7 @@ import { RetryReasonTracker, type RetryTrackerConfig, type RetryStats } from './
 import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
+import { SessionHealthMonitor, type SessionHealthConfig, type SessionHealthStats } from './sessionStability.js';
 
 export interface AntiBanConfig {
   rateLimiter?: Partial<RateLimiterConfig>;
@@ -38,6 +39,18 @@ export interface AntiBanConfig {
   reconnectThrottle?: Partial<ReconnectThrottleConfig>;
   lidResolver?: LidResolverConfig;      // if set, creates a resolver accessible at antiban.lidResolver
   jidCanonicalizer?: JidCanonicalizerConfig;  // opt-in module
+  /** Session stability features (v2.0) — default disabled for backward compatibility */
+  sessionStability?: {
+    enabled: boolean;
+    /** Enable canonical JID normalization before sendMessage (default: true if enabled) */
+    canonicalJidNormalization?: boolean;
+    /** Enable session health monitoring (default: true if enabled) */
+    healthMonitoring?: boolean;
+    /** Bad MAC threshold before declaring session degraded (default: 3) */
+    badMacThreshold?: number;
+    /** Time window for Bad MAC threshold in ms (default: 60000) */
+    badMacWindowMs?: number;
+  };
   /** Log warnings and blocks to console (default: true) */
   logging?: boolean;
 }
@@ -64,6 +77,7 @@ export interface AntiBanStats {
   reconnectThrottle?: ReconnectThrottleStats | null;
   lidResolver?: LidResolverStats | null;
   jidCanonicalizer?: JidCanonicalizerStats | null;
+  sessionStability?: SessionHealthStats | null;
 }
 
 export class AntiBan {
@@ -78,6 +92,7 @@ export class AntiBan {
   private reconnectThrottleModule: PostReconnectThrottle;
   private lidResolverModule: LidResolver | null = null;
   private jidCanonicalizerModule: JidCanonicalizer | null = null;
+  private sessionStabilityMonitor: SessionHealthMonitor | null = null;
   private logging: boolean;
 
   private stats = {
@@ -156,6 +171,26 @@ export class AntiBan {
     } else if (config.lidResolver) {
       // Standalone resolver without canonicalizer
       this.lidResolverModule = new LidResolver(config.lidResolver);
+    }
+
+    // Initialize session stability monitor if enabled
+    if (config.sessionStability?.enabled) {
+      const healthConfig: SessionHealthConfig = {
+        badMacThreshold: config.sessionStability.badMacThreshold,
+        badMacWindowMs: config.sessionStability.badMacWindowMs,
+        onDegraded: (stats) => {
+          if (this.logging) {
+            console.log(`[baileys-antiban] 🔴 SESSION DEGRADED — Bad MAC rate: ${stats.badMacCount} in last ${config.sessionStability?.badMacWindowMs || 60000}ms`);
+            console.log(`[baileys-antiban] Consider restarting session or switching to LID-based canonical form`);
+          }
+        },
+        onRecovered: () => {
+          if (this.logging) {
+            console.log(`[baileys-antiban] 🟢 SESSION RECOVERED — decrypt success rate improved`);
+          }
+        },
+      };
+      this.sessionStabilityMonitor = new SessionHealthMonitor(healthConfig);
     }
   }
 
@@ -384,6 +419,9 @@ export class AntiBan {
     if (this.jidCanonicalizerModule) {
       stats.jidCanonicalizer = this.jidCanonicalizerModule.getStats();
     }
+    if (this.sessionStabilityMonitor) {
+      stats.sessionStability = this.sessionStabilityMonitor.getStats();
+    }
 
     return stats;
   }
@@ -426,6 +464,11 @@ export class AntiBan {
   /** Get the JID canonicalizer for direct access */
   get jidCanonicalizer(): JidCanonicalizer | null {
     return this.jidCanonicalizerModule;
+  }
+
+  /** Get the session stability monitor for direct access */
+  get sessionStability(): SessionHealthMonitor | null {
+    return this.sessionStabilityMonitor;
   }
 
   /**
@@ -486,6 +529,7 @@ export class AntiBan {
     this.reconnectThrottleModule.destroy();
     this.jidCanonicalizerModule?.destroy();
     this.lidResolverModule?.destroy();
+    this.sessionStabilityMonitor?.reset();
     if (this.logging) {
       console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
     }

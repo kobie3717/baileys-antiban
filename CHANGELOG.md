@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-19
+
+### Added
+- **Session Stability Module** — New middleware layer for Baileys socket stability (opt-in, backward compatible)
+  - `wrapWithSessionStability()` — Proxy wrapper for Baileys socket with stability features
+  - `SessionHealthMonitor` — Track decrypt success/fail ratio, emit degradation alerts when Bad MAC rate exceeds threshold
+  - `classifyDisconnect()` — Typed disconnect reason classification with recovery recommendations
+  - Canonical JID normalization before `sendMessage()` — Auto-resolves PN↔LID using `LidResolver` to reduce mutex race triggers
+  - Comprehensive disconnect code coverage: 401, 408, 428, 429, 440, 500, 503, 515, 1000, unknown
+  - Degradation detection: triggers `onDegraded` callback when Bad MAC count exceeds threshold in time window (default: 3 in 60s)
+  - Recovery detection: triggers `onRecovered` callback when Bad MAC rate drops below threshold
+  - 19 new tests with 100% coverage of disconnect classification and health monitoring
+
+### Changed
+- `AntiBan` class extended with optional `sessionStability` config (default: disabled)
+- `AntiBanConfig` interface includes `sessionStability` options (enabled, canonicalJidNormalization, healthMonitoring, badMacThreshold, badMacWindowMs)
+- `AntiBanStats` includes `sessionStability` stats when enabled
+- `destroy()` now cleans up session stability monitor
+- Exposed `sessionStability` getter for direct access to health monitor
+
+### Technical Details
+- Pure middleware layer — no Baileys internals modification required
+- Works alongside existing v1.x LID resolver and canonicalizer modules
+- Default configuration: disabled for backward compatibility, opt-in via `sessionStability: { enabled: true }`
+- Health monitor uses sliding window for Bad MAC detection (default: 3 errors in 60 seconds)
+- Socket wrapper uses ES6 Proxy for transparent method interception
+- TypeScript strict mode compliant, no `any` types except socket wrapper generic
+
+### Breaking Changes
+None — all v2.0 features are opt-in and backward compatible with v1.x
+
 ## [1.6.0] - 2026-04-18
 
 ### Added

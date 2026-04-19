@@ -23,6 +23,8 @@ export { PostReconnectThrottle } from './reconnectThrottle.js';
 // v1.6 new modules
 export { LidResolver } from './lidResolver.js';
 export { JidCanonicalizer } from './jidCanonicalizer.js';
+// v2.0 new modules
+export { SessionHealthMonitor, wrapWithSessionStability, classifyDisconnect, } from './sessionStability.js';
 // Socket wrapper
 export { wrapSocket } from './wrapper.js';
 // Optional features

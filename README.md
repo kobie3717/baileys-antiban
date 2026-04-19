@@ -6,7 +6,144 @@
 
 **Transport-agnostic** anti-ban middleware — protect your WhatsApp number with human-like messaging patterns. Works with both [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
 
-## v1.5 New Features
+## v2.0 New Features — Session Stability Module
+
+### What's New in v2.0
+
+Three powerful new features to improve session stability and reduce "Bad MAC" errors:
+
+1. **Typed Disconnect Reason Classification** — Know exactly why you disconnected and how to recover
+2. **Session Health Monitor** — Detect session degradation before it causes bans
+3. **Socket Wrapper with JID Canonicalization** — Middleware-layer fix for LID/PN race conditions
+
+All v2.0 features are **opt-in** and **100% backward compatible** with v1.x.
+
+### 1. Typed Disconnect Reason Classification
+
+```typescript
+import { classifyDisconnect } from 'baileys-antiban';
+
+sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+  if (connection === 'close' && lastDisconnect?.error) {
+    const statusCode = lastDisconnect.error.output?.statusCode;
+    const classification = classifyDisconnect(statusCode);
+
+    console.log(`Disconnected: ${classification.message}`);
+    console.log(`Category: ${classification.category}`);  // fatal | recoverable | rate-limited | unknown
+    console.log(`Should reconnect: ${classification.shouldReconnect}`);
+    
+    if (classification.shouldReconnect && classification.backoffMs) {
+      console.log(`Recommended backoff: ${classification.backoffMs}ms`);
+      setTimeout(() => connectToWhatsApp(), classification.backoffMs);
+    }
+  }
+});
+```
+
+**Supported disconnect codes**: 401 (logged out), 408 (timeout), 428 (connection replaced), 429 (rate limited), 440 (logged out), 500 (internal error), 503 (unavailable), 515 (restart required), 1000 (graceful close), and unknown codes.
+
+### 2. Session Health Monitor
+
+Track decrypt success/failure ratio to detect session degradation **before** it causes a ban:
+
+```typescript
+import { SessionHealthMonitor } from 'baileys-antiban';
+
+const healthMonitor = new SessionHealthMonitor({
+  badMacThreshold: 3,          // Alert after 3 Bad MACs
+  badMacWindowMs: 60_000,      // ...in 60 seconds
+  onDegraded: (stats) => {
+    console.error(`🔴 SESSION DEGRADED: ${stats.badMacCount} Bad MACs in last minute`);
+    console.error('Action required: Restart session or switch to LID-based canonical form');
+  },
+  onRecovered: (stats) => {
+    console.log('🟢 Session recovered — decrypt success rate improved');
+  },
+});
+
+// Wire to Baileys events
+sock.ev.on('messages.update', (updates) => {
+  for (const { key, update } of updates) {
+    if (update.messageStubType === Types.WAMessageStubType.CIPHERTEXT) {
+      healthMonitor.recordDecryptFail(true); // Bad MAC detected
+    }
+  }
+});
+
+// Check status anytime
+const stats = healthMonitor.getStats();
+console.log(`Decrypt success: ${stats.decryptSuccess}`);
+console.log(`Bad MAC count: ${stats.badMacCount}`);
+console.log(`Is degraded: ${stats.isDegraded}`);
+```
+
+### 3. Socket Wrapper with JID Canonicalization
+
+The easiest way to use v2.0: wrap your socket for automatic JID canonicalization and health monitoring:
+
+```typescript
+import { wrapWithSessionStability, LidResolver } from 'baileys-antiban';
+
+const resolver = new LidResolver({ canonical: 'pn' });
+const sock = makeWASocket({ ... });
+
+const safeSock = wrapWithSessionStability(sock, {
+  canonicalJidNormalization: true,  // Auto-canonicalize JIDs before sendMessage
+  healthMonitoring: true,           // Auto-track decrypt health
+  lidResolver: resolver,
+  health: {
+    badMacThreshold: 3,
+    badMacWindowMs: 60_000,
+    onDegraded: (stats) => console.error('Session degraded!'),
+  },
+});
+
+// Use safeSock exactly like normal sock
+await safeSock.sendMessage('123456@lid', { text: 'hello' });
+// ^ Automatically canonicalized to '27825651069@s.whatsapp.net' if mapping exists
+
+// Access health stats
+const healthStats = safeSock.sessionHealthStats;
+console.log(`Bad MAC count: ${healthStats.badMacCount}`);
+```
+
+### Integration with AntiBan Class
+
+You can also enable session stability via the main `AntiBan` config:
+
+```typescript
+import { AntiBan } from 'baileys-antiban';
+
+const antiban = new AntiBan({
+  sessionStability: {
+    enabled: true,
+    canonicalJidNormalization: true,  // Auto-canonicalize JIDs
+    healthMonitoring: true,           // Track Bad MAC rate
+    badMacThreshold: 3,
+    badMacWindowMs: 60_000,
+  },
+  jidCanonicalizer: {
+    enabled: true,
+    canonical: 'pn',
+  },
+});
+
+// Access health monitor directly
+const healthMonitor = antiban.sessionStability;
+if (healthMonitor) {
+  console.log(healthMonitor.getStats());
+}
+
+// Stats include session stability
+const stats = antiban.getStats();
+console.log(stats.sessionStability);  // Health stats when enabled
+```
+
+**Why v2.0?** Bad MAC errors are the #1 reported Baileys issue. Session stability features give you early warning and automated mitigation, reducing bans caused by session degradation.
+
+---
+
+## v1.5 Features
 
 ### RetryReasonTracker
 Tracks message retry reasons and detects retry spirals (when the same message keeps failing). Inspired by whatsapp-rust's protocol/retry.rs module.

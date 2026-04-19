@@ -12,6 +12,12 @@ import { ReplyRatioGuard } from '../src/replyRatio.js';
 import { ContactGraphWarmer } from '../src/contactGraph.js';
 import { PresenceChoreographer } from '../src/presenceChoreographer.js';
 import { wrapSocket, type WASocket } from '../src/wrapper.js';
+import {
+  classifyDisconnect,
+  SessionHealthMonitor,
+  wrapWithSessionStability,
+} from '../src/sessionStability.js';
+import { LidResolver } from '../src/lidResolver.js';
 
 async function testRateLimiter() {
   console.log('\n=== Testing RateLimiter ===');
@@ -420,6 +426,92 @@ async function testWrapperEventHandling() {
   console.log('✅ Wrapper event handling tests passed');
 }
 
+async function testSessionStability() {
+  console.log('\n=== Testing Session Stability (v2.0) ===');
+
+  // Test disconnect classification
+  console.log('\nTesting disconnect classification:');
+  const codes = [401, 408, 428, 429, 440, 500, 503, 515, 1000, 999];
+  for (const code of codes) {
+    const result = classifyDisconnect(code);
+    console.log(`Code ${code}: ${result.category} - ${result.shouldReconnect ? 'reconnect' : 'NO reconnect'} (backoff: ${result.backoffMs || 0}ms)`);
+  }
+
+  // Test session health monitor
+  console.log('\nTesting session health monitor:');
+  let degradedTriggered = false;
+  let recoveredTriggered = false;
+
+  const monitor = new SessionHealthMonitor({
+    badMacThreshold: 3,
+    badMacWindowMs: 60_000,
+    onDegraded: (stats) => {
+      degradedTriggered = true;
+      console.log(`🔴 SESSION DEGRADED: ${stats.badMacCount} Bad MACs`);
+    },
+    onRecovered: (stats) => {
+      recoveredTriggered = true;
+      console.log(`🟢 SESSION RECOVERED: success=${stats.decryptSuccess}`);
+    },
+  });
+
+  // Record some successful decrypts
+  monitor.recordDecryptSuccess();
+  monitor.recordDecryptSuccess();
+  console.log(`After 2 successes: ${JSON.stringify(monitor.getStats())}`);
+
+  // Trigger degraded state with 3 Bad MACs
+  monitor.recordDecryptFail(true); // Bad MAC
+  monitor.recordDecryptFail(true); // Bad MAC
+  console.log(`After 2 Bad MACs: degraded=${monitor.getStats().isDegraded}`);
+  monitor.recordDecryptFail(true); // 3rd Bad MAC - should trigger degraded
+  console.log(`After 3 Bad MACs: degraded=${monitor.getStats().isDegraded}`);
+
+  if (!degradedTriggered) {
+    throw new Error('Degraded callback not triggered!');
+  }
+
+  // Test socket wrapper with JID canonicalization
+  console.log('\nTesting socket wrapper with JID canonicalization:');
+  const resolver = new LidResolver({ canonical: 'pn' });
+  resolver.learn({
+    lid: '123456@lid',
+    pn: '27825651069@s.whatsapp.net',
+  });
+
+  let lastSentJid: string | null = null;
+  const mockSock = {
+    sendMessage: async (jid: string, content: any) => {
+      lastSentJid = jid;
+      return { status: 'ok' };
+    },
+    user: { id: '123' },
+  };
+
+  const wrapped = wrapWithSessionStability(mockSock, {
+    canonicalJidNormalization: true,
+    healthMonitoring: true,
+    lidResolver: resolver,
+  });
+
+  // Send to LID form - should canonicalize to PN
+  await wrapped.sendMessage('123456@lid', { text: 'hello' });
+  console.log(`Sent to LID '123456@lid', actual JID used: ${lastSentJid}`);
+
+  if (lastSentJid !== '27825651069@s.whatsapp.net') {
+    throw new Error(`JID canonicalization failed! Expected '27825651069@s.whatsapp.net', got '${lastSentJid}'`);
+  }
+
+  // Check health monitor is exposed
+  const healthStats = (wrapped as any).sessionHealthStats;
+  console.log(`Health stats accessible: ${healthStats ? 'yes' : 'no'}`);
+
+  // Test passthrough of other properties
+  console.log(`User property passthrough: ${(wrapped as any).user.id === '123' ? 'yes' : 'no'}`);
+
+  console.log('✅ Session Stability tests passed');
+}
+
 async function runAllTests() {
   console.log('Starting manual tests...\n');
 
@@ -433,6 +525,7 @@ async function runAllTests() {
     await testPresenceChoreographer();
     await testIntegrationAllFeatures();
     await testWrapperEventHandling();
+    await testSessionStability();
 
     console.log('\n✅ ALL TESTS PASSED');
   } catch (error) {

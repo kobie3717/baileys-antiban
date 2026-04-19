@@ -24,6 +24,7 @@ import { RetryReasonTracker } from './retryTracker.js';
 import { PostReconnectThrottle } from './reconnectThrottle.js';
 import { LidResolver } from './lidResolver.js';
 import { JidCanonicalizer } from './jidCanonicalizer.js';
+import { SessionHealthMonitor } from './sessionStability.js';
 export class AntiBan {
     rateLimiter;
     warmUp;
@@ -36,6 +37,7 @@ export class AntiBan {
     reconnectThrottleModule;
     lidResolverModule = null;
     jidCanonicalizerModule = null;
+    sessionStabilityMonitor = null;
     logging;
     stats = {
         messagesAllowed: 0,
@@ -113,6 +115,25 @@ export class AntiBan {
         else if (config.lidResolver) {
             // Standalone resolver without canonicalizer
             this.lidResolverModule = new LidResolver(config.lidResolver);
+        }
+        // Initialize session stability monitor if enabled
+        if (config.sessionStability?.enabled) {
+            const healthConfig = {
+                badMacThreshold: config.sessionStability.badMacThreshold,
+                badMacWindowMs: config.sessionStability.badMacWindowMs,
+                onDegraded: (stats) => {
+                    if (this.logging) {
+                        console.log(`[baileys-antiban] 🔴 SESSION DEGRADED — Bad MAC rate: ${stats.badMacCount} in last ${config.sessionStability?.badMacWindowMs || 60000}ms`);
+                        console.log(`[baileys-antiban] Consider restarting session or switching to LID-based canonical form`);
+                    }
+                },
+                onRecovered: () => {
+                    if (this.logging) {
+                        console.log(`[baileys-antiban] 🟢 SESSION RECOVERED — decrypt success rate improved`);
+                    }
+                },
+            };
+            this.sessionStabilityMonitor = new SessionHealthMonitor(healthConfig);
         }
     }
     /**
@@ -320,6 +341,9 @@ export class AntiBan {
         if (this.jidCanonicalizerModule) {
             stats.jidCanonicalizer = this.jidCanonicalizerModule.getStats();
         }
+        if (this.sessionStabilityMonitor) {
+            stats.sessionStability = this.sessionStabilityMonitor.getStats();
+        }
         return stats;
     }
     /** Get the timelock guard for direct access */
@@ -353,6 +377,10 @@ export class AntiBan {
     /** Get the JID canonicalizer for direct access */
     get jidCanonicalizer() {
         return this.jidCanonicalizerModule;
+    }
+    /** Get the session stability monitor for direct access */
+    get sessionStability() {
+        return this.sessionStabilityMonitor;
     }
     /**
      * Export warm-up state for persistence between restarts
@@ -408,6 +436,7 @@ export class AntiBan {
         this.reconnectThrottleModule.destroy();
         this.jidCanonicalizerModule?.destroy();
         this.lidResolverModule?.destroy();
+        this.sessionStabilityMonitor?.reset();
         if (this.logging) {
             console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
         }

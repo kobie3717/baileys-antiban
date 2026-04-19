@@ -24,6 +24,7 @@ import { RetryReasonTracker, type RetryTrackerConfig, type RetryStats } from './
 import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
+import { SessionHealthMonitor, type SessionHealthStats } from './sessionStability.js';
 export interface AntiBanConfig {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
@@ -36,6 +37,18 @@ export interface AntiBanConfig {
     reconnectThrottle?: Partial<ReconnectThrottleConfig>;
     lidResolver?: LidResolverConfig;
     jidCanonicalizer?: JidCanonicalizerConfig;
+    /** Session stability features (v2.0) — default disabled for backward compatibility */
+    sessionStability?: {
+        enabled: boolean;
+        /** Enable canonical JID normalization before sendMessage (default: true if enabled) */
+        canonicalJidNormalization?: boolean;
+        /** Enable session health monitoring (default: true if enabled) */
+        healthMonitoring?: boolean;
+        /** Bad MAC threshold before declaring session degraded (default: 3) */
+        badMacThreshold?: number;
+        /** Time window for Bad MAC threshold in ms (default: 60000) */
+        badMacWindowMs?: number;
+    };
     /** Log warnings and blocks to console (default: true) */
     logging?: boolean;
 }
@@ -60,6 +73,7 @@ export interface AntiBanStats {
     reconnectThrottle?: ReconnectThrottleStats | null;
     lidResolver?: LidResolverStats | null;
     jidCanonicalizer?: JidCanonicalizerStats | null;
+    sessionStability?: SessionHealthStats | null;
 }
 export declare class AntiBan {
     private rateLimiter;
@@ -73,6 +87,7 @@ export declare class AntiBan {
     private reconnectThrottleModule;
     private lidResolverModule;
     private jidCanonicalizerModule;
+    private sessionStabilityMonitor;
     private logging;
     private stats;
     constructor(config?: AntiBanConfig, warmUpState?: WarmUpState);
@@ -126,6 +141,8 @@ export declare class AntiBan {
     get lidResolver(): LidResolver | null;
     /** Get the JID canonicalizer for direct access */
     get jidCanonicalizer(): JidCanonicalizer | null;
+    /** Get the session stability monitor for direct access */
+    get sessionStability(): SessionHealthMonitor | null;
     /**
      * Export warm-up state for persistence between restarts
      */

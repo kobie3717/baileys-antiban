@@ -28,6 +28,18 @@ export { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThro
 export { LidResolver, type LidResolverConfig, type LidResolverStats, type LidMapping } from './lidResolver.js';
 export { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 
+// v2.0 new modules
+export {
+  SessionHealthMonitor,
+  type SessionHealthStats,
+  type SessionHealthConfig,
+  wrapWithSessionStability,
+  type SessionStabilityConfig,
+  classifyDisconnect,
+  type DisconnectClassification,
+  type DisconnectCategory,
+} from './sessionStability.js';
+
 // Socket wrapper
 export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 
