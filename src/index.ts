@@ -40,6 +40,20 @@ export {
   type DisconnectCategory,
 } from './sessionStability.js';
 
+// v2.1 new modules
+export {
+  LidFirstResolver,
+  createLidFirstResolver,
+  type LidPhoneMapping,
+} from './lidFirstResolver.js';
+export {
+  MessageRetryReason,
+  MAC_ERROR_CODES,
+  parseRetryReason,
+  isMacError,
+  getRetryReasonDescription,
+} from './retryReason.js';
+
 // Socket wrapper
 export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 

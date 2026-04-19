@@ -6,7 +6,6 @@ import {
   classifyDisconnect,
   SessionHealthMonitor,
   wrapWithSessionStability,
-  type DisconnectCategory,
 } from '../src/sessionStability.js';
 import { LidResolver } from '../src/lidResolver.js';
 
@@ -29,6 +28,28 @@ describe('classifyDisconnect', () => {
     expect(result.category).toBe('fatal');
     expect(result.shouldReconnect).toBe(false);
     expect(result.message).toContain('Restart required');
+  });
+
+  it('should classify 405 as fatal (method not allowed)', () => {
+    const result = classifyDisconnect(405);
+    expect(result.category).toBe('fatal');
+    expect(result.shouldReconnect).toBe(false);
+    expect(result.message).toContain('Method not allowed');
+  });
+
+  it('should classify 409 as fatal (conflict/connection replaced)', () => {
+    const result = classifyDisconnect(409);
+    expect(result.category).toBe('fatal');
+    expect(result.shouldReconnect).toBe(false);
+    expect(result.message).toContain('Connection replaced');
+  });
+
+  it('should classify 412 as recoverable (precondition failed)', () => {
+    const result = classifyDisconnect(412);
+    expect(result.category).toBe('recoverable');
+    expect(result.shouldReconnect).toBe(true);
+    expect(result.backoffMs).toBe(30_000); // 30 seconds
+    expect(result.message).toContain('Precondition failed');
   });
 
   it('should classify 428 as fatal (connection replaced)', () => {
@@ -201,11 +222,12 @@ describe('wrapWithSessionStability', () => {
     });
 
     // Send to LID form — should canonicalize to PN
-    await wrapped.sendMessage('123456@lid', { text: 'hello' });
+    await wrapped.sendMessage('123456@lid', { text: 'hello' }, undefined);
 
     expect(mockSock.sendMessage).toHaveBeenCalledWith(
       '27825651069@s.whatsapp.net',
-      { text: 'hello' }
+      { text: 'hello' },
+      undefined
     );
   });
 

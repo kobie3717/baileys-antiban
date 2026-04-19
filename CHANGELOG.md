@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-19
+
+### Added
+- **Extended disconnect code coverage** — Added 405, 409, 412 to `classifyDisconnect()`
+  - **405** (Method Not Allowed) → `fatal`, no reconnect
+  - **409** (Conflict / Connection Replaced) → `fatal`, no reconnect (merged with 428 behavior)
+  - **412** (Precondition Failed) → `recoverable`, 30s backoff (auth state mismatch, retry after delay)
+- **LidFirstResolver** — Standalone drop-in utility for LID↔phone mapping
+  - Loads mappings from Baileys auth state directory (`lid-mapping-*_reverse.json`)
+  - `resolveToLID(phoneOrJid)` — phone → LID lookup
+  - `resolveToPhone(lid)` — LID → phone lookup
+  - `loadFromAuthDir(dir)` — bulk load from auth state
+  - `learnFromEvent(event)` — learn from Baileys events (future-proof)
+  - `getMapping(jid)` — full mapping with metadata
+  - Factory function `createLidFirstResolver()` for singleton pattern
+  - Works independently of full AntiBan system
+- **MessageRetryReason enum** — Typed retry reason codes for message encryption failures
+  - 8 retry reason codes: UnknownError, GenericError, SignalErrorInvalidKeyId, SignalErrorInvalidMessage, SignalErrorNoSession, SignalErrorBadMac, MessageExpired, DecryptionError
+  - `MAC_ERROR_CODES` set for quick MAC error detection
+  - `parseRetryReason(code)` — parse from string/number to enum
+  - `isMacError(reason)` — check if reason is a MAC error
+  - `getRetryReasonDescription(reason)` — human-readable descriptions
+  - Based on whatsapp-rust and Baileys protocol research
+  - Named `MessageRetryReason` to avoid conflict with existing `RetryReason` type from `retryTracker.ts`
+
+### Changed
+- `index.ts` now exports `LidFirstResolver`, `createLidFirstResolver`, `LidPhoneMapping`, `MessageRetryReason`, `MAC_ERROR_CODES`, `parseRetryReason`, `isMacError`, `getRetryReasonDescription`
+
+### Tests
+- 30 new tests for `LidFirstResolver` (auth dir loading, phone↔LID resolution, malformed input handling, factory function)
+- 21 new tests for `RetryReason` (enum values, MAC error detection, parsing, descriptions, integration scenarios)
+- 3 new tests for disconnect codes 405, 409, 412 in `sessionStability.test.ts`
+- Total new test coverage: 54 tests
+
+### Technical Details
+- `LidFirstResolver` uses in-memory maps for O(1) lookup performance
+- Handles device suffix normalization (`:N` in JIDs)
+- Gracefully handles malformed auth dirs and JSON files (no crashes)
+- `RetryReason` enum matches Signal protocol + WhatsApp extensions
+- Backward compatible — all new features are opt-in, no breaking changes
+
 ## [2.0.0] - 2026-04-19
 
 ### Added

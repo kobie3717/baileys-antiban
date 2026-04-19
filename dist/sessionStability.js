@@ -34,12 +34,31 @@ export function classifyDisconnect(statusCode) {
             code: statusCode,
         };
     }
-    // Connection replaced — user logged in elsewhere or multi-device conflict
-    if (statusCode === 428) {
+    // Method not allowed — server rejecting connection method
+    if (statusCode === 405) {
         return {
             category: 'fatal',
             shouldReconnect: false,
-            message: 'Connection replaced — another device logged in',
+            message: 'Method not allowed — server rejected connection method',
+            code: statusCode,
+        };
+    }
+    // Conflict / Connection replaced — user logged in elsewhere or multi-device conflict
+    if (statusCode === 409 || statusCode === 428) {
+        return {
+            category: 'fatal',
+            shouldReconnect: false,
+            message: 'Connection replaced — another device took over',
+            code: statusCode,
+        };
+    }
+    // Precondition failed — auth state mismatch, retry after delay
+    if (statusCode === 412) {
+        return {
+            category: 'recoverable',
+            shouldReconnect: true,
+            backoffMs: 30_000, // 30 seconds
+            message: 'Precondition failed — auth state mismatch, retry after delay',
             code: statusCode,
         };
     }
