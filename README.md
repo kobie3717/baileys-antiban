@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/baileys-antiban.svg)](https://www.npmjs.com/package/baileys-antiban)
 [![Node.js Version](https://img.shields.io/node/v/baileys-antiban.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Sister: baileys-keep-alive](https://img.shields.io/badge/sister-baileys--keep--alive-25D366)](https://github.com/kobie3717/baileys-keep-alive)
 
 **Drop-in anti-ban middleware for Baileys WhatsApp bots. Free, self-hosted, TypeScript-first. Whapi.Cloud alternative — zero monthly fees.**
 
