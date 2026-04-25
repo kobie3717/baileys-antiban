@@ -151,12 +151,13 @@ export class AntiBan {
 
     this.resolvedConfig = cfg;
 
-    // Initialize persistence
+    // Initialize persistence — load state before constructing modules
+    let savedState: PersistedState | null = null;
     if (cfg.persist) {
       this.stateManager = new StateManager(cfg.persist);
-      const saved = this.stateManager.load();
-      if (saved) {
-        warmUpState = saved.warmup;
+      savedState = this.stateManager.load();
+      if (savedState) {
+        warmUpState = savedState.warmup;
       }
     }
 
@@ -171,6 +172,11 @@ export class AntiBan {
       newChatDelayMs: cfg.newChatDelayMs,
       ...(legacyPassthrough?.rateLimiter || {}),
     });
+
+    // Restore knownChats from persisted state after rateLimiter is constructed
+    if (savedState?.knownChats) {
+      this.rateLimiter.restoreKnownChats(savedState.knownChats);
+    }
 
     this.warmUp = new WarmUp({
       warmUpDays: cfg.warmupDays,

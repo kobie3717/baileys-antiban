@@ -11,6 +11,13 @@ export interface PersistedState {
 const KNOWN_CHATS_MAX = 1000;
 const DEBOUNCE_MS = 5000;
 
+/**
+ * Manages persisted state for a single baileys-antiban instance.
+ *
+ * **Single-writer assumption:** No file lock is used. Two processes sharing
+ * the same state file will race on concurrent writes. Use separate state
+ * files per process to avoid data corruption.
+ */
 export class StateManager {
   private path: string;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;

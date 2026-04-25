@@ -223,6 +223,13 @@ export class RateLimiter {
     return this.knownChats;
   }
 
+  /** Restore known chats from persisted state */
+  restoreKnownChats(chats: string[]): void {
+    for (const jid of chats) {
+      this.knownChats.add(jid);
+    }
+  }
+
   private cleanup(now: number): void {
     // Remove messages older than 24 hours
     this.messages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_DAY);
