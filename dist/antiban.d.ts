@@ -25,7 +25,8 @@ import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThro
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 import { SessionHealthMonitor, type SessionHealthStats } from './sessionStability.js';
-export interface AntiBanConfig {
+import { type AntiBanInput } from './presets.js';
+export interface AntiBanConfigLegacy {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
     health?: Partial<HealthMonitorConfig>;
@@ -37,21 +38,16 @@ export interface AntiBanConfig {
     reconnectThrottle?: Partial<ReconnectThrottleConfig>;
     lidResolver?: LidResolverConfig;
     jidCanonicalizer?: JidCanonicalizerConfig;
-    /** Session stability features (v2.0) — default disabled for backward compatibility */
     sessionStability?: {
         enabled: boolean;
-        /** Enable canonical JID normalization before sendMessage (default: true if enabled) */
         canonicalJidNormalization?: boolean;
-        /** Enable session health monitoring (default: true if enabled) */
         healthMonitoring?: boolean;
-        /** Bad MAC threshold before declaring session degraded (default: 3) */
         badMacThreshold?: number;
-        /** Time window for Bad MAC threshold in ms (default: 60000) */
         badMacWindowMs?: number;
     };
-    /** Log warnings and blocks to console (default: true) */
     logging?: boolean;
 }
+export type AntiBanConfig = AntiBanInput | AntiBanConfigLegacy;
 export interface SendDecision {
     allowed: boolean;
     delayMs: number;
@@ -88,9 +84,11 @@ export declare class AntiBan {
     private lidResolverModule;
     private jidCanonicalizerModule;
     private sessionStabilityMonitor;
+    private stateManager;
+    private resolvedConfig;
     private logging;
     private stats;
-    constructor(config?: AntiBanConfig, warmUpState?: WarmUpState);
+    constructor(input?: AntiBanInput | AntiBanConfigLegacy, warmUpStateArg?: WarmUpState);
     /**
      * Check if a message can be sent and get required delay.
      * Call this BEFORE every sendMessage().
@@ -159,6 +157,8 @@ export declare class AntiBan {
      * Reset everything (use after a ban period)
      */
     reset(): void;
+    private persistStateDebounced;
+    private persistStateImmediate;
     /**
      * Clean up all timers and resources.
      * Call this when disposing of the AntiBan instance or when the socket closes.

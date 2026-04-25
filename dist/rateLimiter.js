@@ -154,6 +154,16 @@ export class RateLimiter {
             knownChats: this.knownChats.size,
         };
     }
+    /** Get the set of known chat JIDs (for state persistence) */
+    getKnownChats() {
+        return this.knownChats;
+    }
+    /** Restore known chats from persisted state */
+    restoreKnownChats(chats) {
+        for (const jid of chats) {
+            this.knownChats.add(jid);
+        }
+    }
     cleanup(now) {
         // Remove messages older than 24 hours
         this.messages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_DAY);

@@ -28,3 +28,6 @@ export { ContentVariator, type VariatorConfig } from './contentVariator.js';
 export { WebhookAlerts, type WebhookConfig } from './webhooks.js';
 export { Scheduler, type SchedulerConfig } from './scheduler.js';
 export { type StateAdapter, FileStateAdapter } from './stateAdapter.js';
+export { resolveConfig, PRESETS, type AntiBanInput, type ResolvedConfig, type PresetName } from './presets.js';
+export { StateManager, type PersistedState } from './persist.js';
+export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMultiplier, type RateLimits } from './profiles.js';

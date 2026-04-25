@@ -24,6 +24,8 @@ export class HealthMonitor {
     startTime = Date.now();
     paused = false;
     lastRisk = 'low';
+    lastBadEventTime = Date.now();
+    lastEventWasSevere = false;
     constructor(config = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
     }
@@ -32,16 +34,20 @@ export class HealthMonitor {
      */
     recordDisconnect(reason) {
         const reasonStr = String(reason);
-        // 403 = Forbidden (WhatsApp blocking)
         if (reasonStr === '403' || reasonStr === 'forbidden') {
             this.events.push({ type: 'forbidden', timestamp: Date.now(), detail: reasonStr });
+            this.lastBadEventTime = Date.now();
+            this.lastEventWasSevere = true;
         }
-        // 401 = Logged out (possible temp ban)
         else if (reasonStr === '401' || reasonStr === 'loggedOut') {
             this.events.push({ type: 'loggedOut', timestamp: Date.now(), detail: reasonStr });
+            this.lastBadEventTime = Date.now();
+            this.lastEventWasSevere = true;
         }
         else {
             this.events.push({ type: 'disconnect', timestamp: Date.now(), detail: reasonStr });
+            this.lastBadEventTime = Date.now();
+            this.lastEventWasSevere = false;
         }
         this.checkAndNotify();
     }
@@ -56,6 +62,8 @@ export class HealthMonitor {
      */
     recordMessageFailed(error) {
         this.events.push({ type: 'messageFailed', timestamp: Date.now(), detail: error });
+        this.lastBadEventTime = Date.now();
+        this.lastEventWasSevere = false;
         this.checkAndNotify();
     }
     /**
@@ -63,6 +71,8 @@ export class HealthMonitor {
      */
     recordReachoutTimelock(detail) {
         this.events.push({ type: 'reachoutTimelocked', timestamp: Date.now(), detail });
+        this.lastBadEventTime = Date.now();
+        this.lastEventWasSevere = false;
         this.checkAndNotify();
     }
     /**
@@ -100,7 +110,7 @@ export class HealthMonitor {
             reasons.push(`${disconnects} disconnects in last hour (critical threshold)`);
         }
         else if (disconnects >= this.config.disconnectWarningThreshold) {
-            score += 15;
+            score += 30;
             reasons.push(`${disconnects} disconnects in last hour`);
         }
         // Failed messages
@@ -110,12 +120,18 @@ export class HealthMonitor {
         }
         // Determine risk level
         score = Math.min(100, score);
+        // Tiered decay: recover based on time since last bad event
+        // Severe (403/401): 2pts/min — ~50min to clear 100pts
+        // Normal: 5pts/min — ~20min to clear 100pts
+        const minutesSinceLastBad = (now - this.lastBadEventTime) / 60000;
+        const decayRate = this.lastEventWasSevere ? 2 : 5;
+        score = Math.max(0, score - Math.floor(minutesSinceLastBad * decayRate));
         let risk;
-        if (score >= 85)
+        if (score >= 80)
             risk = 'critical';
-        else if (score >= 60)
+        else if (score >= 40)
             risk = 'high';
-        else if (score >= 30)
+        else if (score >= 15)
             risk = 'medium';
         else
             risk = 'low';
@@ -174,6 +190,8 @@ export class HealthMonitor {
         this.startTime = Date.now();
         this.paused = false;
         this.lastRisk = 'low';
+        this.lastBadEventTime = Date.now();
+        this.lastEventWasSevere = false;
     }
     cleanup(now) {
         // Keep last 6 hours of events

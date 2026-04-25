@@ -25,6 +25,44 @@ import { PostReconnectThrottle } from './reconnectThrottle.js';
 import { LidResolver } from './lidResolver.js';
 import { JidCanonicalizer } from './jidCanonicalizer.js';
 import { SessionHealthMonitor } from './sessionStability.js';
+import { resolveConfig } from './presets.js';
+import { StateManager } from './persist.js';
+import { shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';
+function isLegacyConfig(cfg) {
+    if (typeof cfg !== 'object' || cfg === null)
+        return false;
+    return 'rateLimiter' in cfg || 'warmUp' in cfg || 'health' in cfg || 'timelock' in cfg ||
+        'replyRatio' in cfg || 'contactGraph' in cfg || 'presence' in cfg || 'retryTracker' in cfg ||
+        'reconnectThrottle' in cfg || 'lidResolver' in cfg || 'jidCanonicalizer' in cfg ||
+        'sessionStability' in cfg;
+}
+function mapLegacyToFlat(legacy) {
+    console.warn('[baileys-antiban] DEPRECATED: Nested config (v2 style) detected. ' +
+        'Migrate to flat config: new AntiBan({ maxPerMinute: 8 }). ' +
+        'See: https://github.com/kobie3717/baileys-antiban#migration');
+    const flat = {};
+    if (legacy.rateLimiter?.maxPerMinute !== undefined)
+        flat.maxPerMinute = legacy.rateLimiter.maxPerMinute;
+    if (legacy.rateLimiter?.maxPerHour !== undefined)
+        flat.maxPerHour = legacy.rateLimiter.maxPerHour;
+    if (legacy.rateLimiter?.maxPerDay !== undefined)
+        flat.maxPerDay = legacy.rateLimiter.maxPerDay;
+    if (legacy.rateLimiter?.minDelayMs !== undefined)
+        flat.minDelayMs = legacy.rateLimiter.minDelayMs;
+    if (legacy.rateLimiter?.maxDelayMs !== undefined)
+        flat.maxDelayMs = legacy.rateLimiter.maxDelayMs;
+    if (legacy.rateLimiter?.newChatDelayMs !== undefined)
+        flat.newChatDelayMs = legacy.rateLimiter.newChatDelayMs;
+    if (legacy.warmUp?.warmUpDays !== undefined)
+        flat.warmupDays = legacy.warmUp.warmUpDays;
+    if (legacy.warmUp?.day1Limit !== undefined)
+        flat.day1Limit = legacy.warmUp.day1Limit;
+    if (legacy.warmUp?.growthFactor !== undefined)
+        flat.growthFactor = legacy.warmUp.growthFactor;
+    if (legacy.logging !== undefined)
+        flat.logging = legacy.logging;
+    return flat;
+}
 export class AntiBan {
     rateLimiter;
     warmUp;
@@ -38,17 +76,63 @@ export class AntiBan {
     lidResolverModule = null;
     jidCanonicalizerModule = null;
     sessionStabilityMonitor = null;
+    stateManager = null;
+    resolvedConfig;
     logging;
     stats = {
         messagesAllowed: 0,
         messagesBlocked: 0,
         totalDelayMs: 0,
     };
-    constructor(config = {}, warmUpState) {
-        this.rateLimiter = new RateLimiter(config.rateLimiter);
-        this.warmUp = new WarmUp(config.warmUp, warmUpState);
+    constructor(input, warmUpStateArg) {
+        let flatConfig;
+        let legacyPassthrough = null;
+        let warmUpState = warmUpStateArg;
+        if (isLegacyConfig(input)) {
+            legacyPassthrough = input;
+            flatConfig = mapLegacyToFlat(legacyPassthrough);
+        }
+        else {
+            flatConfig = {};
+            legacyPassthrough = null;
+        }
+        const cfg = isLegacyConfig(input)
+            ? resolveConfig(flatConfig)
+            : resolveConfig(input);
+        this.resolvedConfig = cfg;
+        // Initialize persistence — load state before constructing modules
+        let savedState = null;
+        if (cfg.persist) {
+            this.stateManager = new StateManager(cfg.persist);
+            savedState = this.stateManager.load();
+            if (savedState) {
+                warmUpState = savedState.warmup;
+            }
+        }
+        this.logging = cfg.logging ?? true;
+        this.rateLimiter = new RateLimiter({
+            maxPerMinute: cfg.maxPerMinute,
+            maxPerHour: cfg.maxPerHour,
+            maxPerDay: cfg.maxPerDay,
+            minDelayMs: cfg.minDelayMs,
+            maxDelayMs: cfg.maxDelayMs,
+            newChatDelayMs: cfg.newChatDelayMs,
+            ...(legacyPassthrough?.rateLimiter || {}),
+        });
+        // Restore knownChats from persisted state after rateLimiter is constructed
+        if (savedState?.knownChats) {
+            this.rateLimiter.restoreKnownChats(savedState.knownChats);
+        }
+        this.warmUp = new WarmUp({
+            warmUpDays: cfg.warmupDays,
+            day1Limit: cfg.day1Limit,
+            growthFactor: cfg.growthFactor,
+            inactivityThresholdHours: cfg.inactivityThresholdHours,
+            ...(legacyPassthrough?.warmUp || {}),
+        }, warmUpState);
         this.health = new HealthMonitor({
-            ...config.health,
+            autoPauseAt: cfg.autoPauseAt,
+            ...(legacyPassthrough?.health || {}),
             onRiskChange: (status) => {
                 if (this.logging) {
                     const emoji = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' };
@@ -56,74 +140,74 @@ export class AntiBan {
                     console.log(`[baileys-antiban] ${status.recommendation}`);
                     status.reasons.forEach(r => console.log(`[baileys-antiban]   → ${r}`));
                 }
-                config.health?.onRiskChange?.(status);
+                // Call original callback if present
+                legacyPassthrough?.health?.onRiskChange?.(status);
             },
         });
-        this.logging = config.logging ?? true;
         this.timelockGuard = new TimelockGuard({
-            ...config.timelock,
+            ...(legacyPassthrough?.timelock || {}),
             onTimelockDetected: (state) => {
                 this.health.recordReachoutTimelock(state.enforcementType);
                 if (this.logging) {
                     console.log(`[baileys-antiban] REACHOUT TIMELOCKED — ${state.enforcementType || 'unknown'}, expires ${state.expiresAt?.toISOString() || 'unknown'}`);
                 }
-                config.timelock?.onTimelockDetected?.(state);
+                legacyPassthrough?.timelock?.onTimelockDetected?.(state);
             },
             onTimelockLifted: (state) => {
                 if (this.logging) {
                     console.log(`[baileys-antiban] Timelock lifted — resuming new contact messages`);
                 }
-                config.timelock?.onTimelockLifted?.(state);
+                legacyPassthrough?.timelock?.onTimelockLifted?.(state);
             },
         });
-        this.replyRatioGuard = new ReplyRatioGuard(config.replyRatio);
-        this.contactGraphWarmer = new ContactGraphWarmer(config.contactGraph);
-        this.presenceChoreographer = new PresenceChoreographer(config.presence);
+        this.replyRatioGuard = new ReplyRatioGuard(legacyPassthrough?.replyRatio);
+        this.contactGraphWarmer = new ContactGraphWarmer(legacyPassthrough?.contactGraph);
+        this.presenceChoreographer = new PresenceChoreographer(legacyPassthrough?.presence);
         this.retryTrackerModule = new RetryReasonTracker({
-            ...config.retryTracker,
+            ...(legacyPassthrough?.retryTracker || {}),
             onSpiral: (msgId, reason) => {
                 if (this.logging) {
                     console.log(`[baileys-antiban] ⚠️  Message ${msgId} stuck in retry spiral (${reason})`);
                 }
-                config.retryTracker?.onSpiral?.(msgId, reason);
+                legacyPassthrough?.retryTracker?.onSpiral?.(msgId, reason);
             },
         });
         this.reconnectThrottleModule = new PostReconnectThrottle({
-            ...config.reconnectThrottle,
+            ...(legacyPassthrough?.reconnectThrottle || {}),
             baselineRatePerMinute: () => this.rateLimiter.getStats().limits.perMinute,
         });
         // Initialize LID resolver and canonicalizer if configured
         // If jidCanonicalizer is enabled but no resolver provided, create standalone resolver
-        if (config.jidCanonicalizer?.enabled) {
+        if (legacyPassthrough?.jidCanonicalizer?.enabled) {
             // Create or use provided resolver
-            if (config.jidCanonicalizer.resolver) {
+            if (legacyPassthrough.jidCanonicalizer.resolver) {
                 // User provided their own resolver
-                this.jidCanonicalizerModule = new JidCanonicalizer(config.jidCanonicalizer);
-                this.lidResolverModule = config.jidCanonicalizer.resolver;
+                this.jidCanonicalizerModule = new JidCanonicalizer(legacyPassthrough.jidCanonicalizer);
+                this.lidResolverModule = legacyPassthrough.jidCanonicalizer.resolver;
             }
             else {
                 // Create new resolver using lidResolver config if provided
-                const resolverConfig = config.lidResolver || config.jidCanonicalizer.resolverConfig;
+                const resolverConfig = legacyPassthrough.lidResolver || legacyPassthrough.jidCanonicalizer.resolverConfig;
                 const resolver = new LidResolver(resolverConfig);
                 this.lidResolverModule = resolver;
                 this.jidCanonicalizerModule = new JidCanonicalizer({
-                    ...config.jidCanonicalizer,
+                    ...legacyPassthrough.jidCanonicalizer,
                     resolver,
                 });
             }
         }
-        else if (config.lidResolver) {
+        else if (legacyPassthrough?.lidResolver) {
             // Standalone resolver without canonicalizer
-            this.lidResolverModule = new LidResolver(config.lidResolver);
+            this.lidResolverModule = new LidResolver(legacyPassthrough.lidResolver);
         }
         // Initialize session stability monitor if enabled
-        if (config.sessionStability?.enabled) {
+        if (legacyPassthrough?.sessionStability?.enabled) {
             const healthConfig = {
-                badMacThreshold: config.sessionStability.badMacThreshold,
-                badMacWindowMs: config.sessionStability.badMacWindowMs,
+                badMacThreshold: legacyPassthrough.sessionStability.badMacThreshold,
+                badMacWindowMs: legacyPassthrough.sessionStability.badMacWindowMs,
                 onDegraded: (stats) => {
                     if (this.logging) {
-                        console.log(`[baileys-antiban] 🔴 SESSION DEGRADED — Bad MAC rate: ${stats.badMacCount} in last ${config.sessionStability?.badMacWindowMs || 60000}ms`);
+                        console.log(`[baileys-antiban] 🔴 SESSION DEGRADED — Bad MAC rate: ${stats.badMacCount} in last ${legacyPassthrough?.sessionStability?.badMacWindowMs || 60000}ms`);
                         console.log(`[baileys-antiban] Consider restarting session or switching to LID-based canonical form`);
                     }
                 },
@@ -226,6 +310,24 @@ export class AntiBan {
                 health: healthStatus,
             };
         }
+        // Group profile rate check (runs before rateLimiter.getDelay for timing)
+        if (this.resolvedConfig.groupProfiles && shouldUseGroupProfile(recipient)) {
+            const groupLimits = applyGroupMultiplier({
+                maxPerMinute: this.resolvedConfig.maxPerMinute,
+                maxPerHour: this.resolvedConfig.maxPerHour,
+                maxPerDay: this.resolvedConfig.maxPerDay,
+            }, this.resolvedConfig.groupMultiplier);
+            const stats = this.rateLimiter.getStats();
+            if (stats.lastMinute >= groupLimits.maxPerMinute ||
+                stats.lastHour >= groupLimits.maxPerHour ||
+                stats.lastDay >= groupLimits.maxPerDay) {
+                this.stats.messagesBlocked++;
+                if (this.logging) {
+                    console.log(`[baileys-antiban] 🚫 BLOCKED — group rate limit exceeded for ${recipient}`);
+                }
+                return { allowed: false, delayMs: 0, reason: 'Group rate limit exceeded', health: healthStatus };
+            }
+        }
         // Rate limiter delay
         let delay = await this.rateLimiter.getDelay(recipient, content);
         if (delay === -1) {
@@ -279,6 +381,7 @@ export class AntiBan {
         this.warmUp.record();
         this.replyRatioGuard.recordSent(recipient);
         this.stats.messagesAllowed++;
+        this.persistStateDebounced();
     }
     /**
      * Record a failed message send
@@ -292,6 +395,10 @@ export class AntiBan {
     onDisconnect(reason) {
         this.health.recordDisconnect(reason);
         this.reconnectThrottleModule.onDisconnect();
+        const reasonStr = String(reason);
+        if (reasonStr === '403' || reasonStr === '401' || reasonStr === 'forbidden' || reasonStr === 'loggedOut') {
+            this.persistStateImmediate();
+        }
     }
     /**
      * Record a successful reconnection
@@ -423,11 +530,34 @@ export class AntiBan {
             console.log('[baileys-antiban] 🔄 Reset — starting fresh warm-up');
         }
     }
+    persistStateDebounced() {
+        if (!this.stateManager)
+            return;
+        const state = {
+            warmup: this.warmUp.exportState(),
+            knownChats: Array.from(this.rateLimiter.getKnownChats()),
+            savedAt: Date.now(),
+            version: 3,
+        };
+        this.stateManager.saveDebounced(state);
+    }
+    persistStateImmediate() {
+        if (!this.stateManager)
+            return;
+        const state = {
+            warmup: this.warmUp.exportState(),
+            knownChats: Array.from(this.rateLimiter.getKnownChats()),
+            savedAt: Date.now(),
+            version: 3,
+        };
+        this.stateManager.saveImmediate(state);
+    }
     /**
      * Clean up all timers and resources.
      * Call this when disposing of the AntiBan instance or when the socket closes.
      */
     destroy() {
+        this.stateManager?.destroy();
         this.timelockGuard.reset(); // Clears the resumeTimer
         this.replyRatioGuard.reset();
         this.contactGraphWarmer.reset();

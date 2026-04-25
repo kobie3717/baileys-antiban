@@ -37,3 +37,7 @@ export { WebhookAlerts } from './webhooks.js';
 export { Scheduler } from './scheduler.js';
 // State persistence
 export { FileStateAdapter } from './stateAdapter.js';
+// v3.0 new modules
+export { resolveConfig, PRESETS } from './presets.js';
+export { StateManager } from './persist.js';
+export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';

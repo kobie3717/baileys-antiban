@@ -45,6 +45,8 @@ export declare class HealthMonitor {
     private startTime;
     private paused;
     private lastRisk;
+    private lastBadEventTime;
+    private lastEventWasSevere;
     constructor(config?: Partial<HealthMonitorConfig>);
     /**
      * Record a disconnection event

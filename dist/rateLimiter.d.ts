@@ -61,6 +61,10 @@ export declare class RateLimiter {
      * Get current usage stats
      */
     getStats(): RateLimiterStats;
+    /** Get the set of known chat JIDs (for state persistence) */
+    getKnownChats(): Set<string>;
+    /** Restore known chats from persisted state */
+    restoreKnownChats(chats: string[]): void;
     private cleanup;
     /** Random delay between min and max (gaussian-ish distribution) */
     private jitter;
