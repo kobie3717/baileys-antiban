@@ -65,3 +65,8 @@ export { Scheduler, type SchedulerConfig } from './scheduler.js';
 
 // State persistence
 export { type StateAdapter, FileStateAdapter } from './stateAdapter.js';
+
+// v3.0 new modules
+export { resolveConfig, PRESETS, type AntiBanInput, type ResolvedConfig, type PresetName } from './presets.js';
+export { StateManager, type PersistedState } from './persist.js';
+export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMultiplier, type RateLimits } from './profiles.js';
