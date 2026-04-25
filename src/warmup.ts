@@ -19,8 +19,6 @@ export interface WarmUpConfig {
   growthFactor: number;
   /** Hours of inactivity before re-entering warm-up (default: 72) */
   inactivityThresholdHours: number;
-  /** Persist state to this file path (optional) */
-  statePath?: string;
 }
 
 const DEFAULT_CONFIG: WarmUpConfig = {
