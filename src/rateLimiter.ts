@@ -218,6 +218,11 @@ export class RateLimiter {
     };
   }
 
+  /** Get the set of known chat JIDs (for state persistence) */
+  getKnownChats(): Set<string> {
+    return this.knownChats;
+  }
+
   private cleanup(now: number): void {
     // Remove messages older than 24 hours
     this.messages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_DAY);
