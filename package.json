@@ -27,6 +27,9 @@
     "test:check": "tsc --noEmit && npm test",
     "prepublishOnly": "npm run build"
   },
+  "bin": {
+    "baileys-antiban": "./dist/cli.js"
+  },
   "keywords": [
     "baileys",
     "baileyrs",
