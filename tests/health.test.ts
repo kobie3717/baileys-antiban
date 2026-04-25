@@ -184,4 +184,54 @@ describe('HealthMonitor', () => {
       expect(status.stats.failedMessagesLastHour).toBe(0);
     });
   });
+
+  describe('Health score decay', () => {
+    test('score decays to 0 after clean time (low severity)', () => {
+      const monitor = new HealthMonitor({});
+      monitor.recordReachoutTimelock('soft'); // +25 pts, low severity
+      const statusBefore = monitor.getStatus();
+      expect(statusBefore.score).toBeGreaterThan(0);
+
+      // Simulate 5 min ago (5pts/min × 5 = 25 decayed → 0)
+      (monitor as any).lastBadEventTime = Date.now() - 5 * 60 * 1000;
+      (monitor as any).lastEventWasSevere = false;
+
+      const statusAfter = monitor.getStatus();
+      expect(statusAfter.score).toBe(0);
+      expect(statusAfter.risk).toBe('low');
+    });
+
+    test('403 severe: exactly 20 min → score reaches 0', () => {
+      const monitor = new HealthMonitor({});
+      monitor.recordDisconnect('403'); // +40 pts
+      const initial = monitor.getStatus();
+      expect(initial.score).toBe(40);
+
+      // 20 min: 2pts/min × 20 = 40 decayed → 0
+      (monitor as any).lastBadEventTime = Date.now() - 20 * 60 * 1000;
+      (monitor as any).lastEventWasSevere = true;
+
+      const after20 = monitor.getStatus();
+      expect(after20.score).toBe(0);
+    });
+
+    test('403 severe: 10 min → score = 20', () => {
+      const monitor = new HealthMonitor({});
+      monitor.recordDisconnect('403'); // +40
+      (monitor as any).lastBadEventTime = Date.now() - 10 * 60 * 1000;
+      (monitor as any).lastEventWasSevere = true;
+      // 2pts/min × 10 = 20 decayed, 40-20 = 20
+      const status = monitor.getStatus();
+      expect(status.score).toBe(20);
+      expect(status.risk).toBe('low'); // 20 < 30
+    });
+
+    test('recordReconnect does NOT reset lastBadEventTime', () => {
+      const monitor = new HealthMonitor({});
+      monitor.recordReachoutTimelock('soft');
+      const badTime = (monitor as any).lastBadEventTime;
+      monitor.recordReconnect();
+      expect((monitor as any).lastBadEventTime).toBe(badTime);
+    });
+  });
 });

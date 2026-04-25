@@ -62,6 +62,8 @@ export class HealthMonitor {
   private startTime = Date.now();
   private paused = false;
   private lastRisk: BanRiskLevel = 'low';
+  private lastBadEventTime: number = Date.now();
+  private lastEventWasSevere: boolean = false;
 
   constructor(config: Partial<HealthMonitorConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -72,19 +74,20 @@ export class HealthMonitor {
    */
   recordDisconnect(reason: string | number): void {
     const reasonStr = String(reason);
-    
-    // 403 = Forbidden (WhatsApp blocking)
+
     if (reasonStr === '403' || reasonStr === 'forbidden') {
       this.events.push({ type: 'forbidden', timestamp: Date.now(), detail: reasonStr });
-    }
-    // 401 = Logged out (possible temp ban)
-    else if (reasonStr === '401' || reasonStr === 'loggedOut') {
+      this.lastBadEventTime = Date.now();
+      this.lastEventWasSevere = true;
+    } else if (reasonStr === '401' || reasonStr === 'loggedOut') {
       this.events.push({ type: 'loggedOut', timestamp: Date.now(), detail: reasonStr });
-    }
-    else {
+      this.lastBadEventTime = Date.now();
+      this.lastEventWasSevere = true;
+    } else {
       this.events.push({ type: 'disconnect', timestamp: Date.now(), detail: reasonStr });
+      this.lastBadEventTime = Date.now();
+      this.lastEventWasSevere = false;
     }
-
     this.checkAndNotify();
   }
 
@@ -100,6 +103,8 @@ export class HealthMonitor {
    */
   recordMessageFailed(error?: string): void {
     this.events.push({ type: 'messageFailed', timestamp: Date.now(), detail: error });
+    this.lastBadEventTime = Date.now();
+    this.lastEventWasSevere = false;
     this.checkAndNotify();
   }
 
@@ -108,6 +113,8 @@ export class HealthMonitor {
    */
   recordReachoutTimelock(detail?: string): void {
     this.events.push({ type: 'reachoutTimelocked', timestamp: Date.now(), detail });
+    this.lastBadEventTime = Date.now();
+    this.lastEventWasSevere = false;
     this.checkAndNotify();
   }
 
@@ -163,6 +170,14 @@ export class HealthMonitor {
 
     // Determine risk level
     score = Math.min(100, score);
+
+    // Tiered decay: recover based on time since last bad event
+    // Severe (403/401): 2pts/min — ~50min to clear 100pts
+    // Normal: 5pts/min — ~20min to clear 100pts
+    const minutesSinceLastBad = (now - this.lastBadEventTime) / 60000;
+    const decayRate = this.lastEventWasSevere ? 2 : 5;
+    score = Math.max(0, score - Math.floor(minutesSinceLastBad * decayRate));
+
     let risk: BanRiskLevel;
     if (score >= 85) risk = 'critical';
     else if (score >= 60) risk = 'high';
@@ -230,6 +245,8 @@ export class HealthMonitor {
     this.startTime = Date.now();
     this.paused = false;
     this.lastRisk = 'low';
+    this.lastBadEventTime = Date.now();
+    this.lastEventWasSevere = false;
   }
 
   private cleanup(now: number): void {
