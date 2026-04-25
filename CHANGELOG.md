@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] — 2026-04-25
+
+### New Features
+- **messageRecovery** — Solves Baileys' silent message loss on 408 reconnect (47+ 👍 issue)
+  - Tracks last seen message per chat while connected
+  - Detects disconnect/reconnect cycles automatically
+  - On reconnect, queries Baileys message store for gap messages
+  - Re-emits missing messages through user callback (wire to existing messages.upsert handler)
+  - Fires `onGapTooLarge` callback if disconnect > 30min (configurable) instead of partial recovery
+  - Optional persistence across process restarts (`persistPath` config)
+  - LRU eviction when tracked chats exceed `maxTrackedChats` (default 1000)
+  - Gracefully handles Baileys versions without `fetchMessageHistory` (logs warning, skips recovery)
+
+### Usage
+```ts
+import { messageRecovery } from 'baileys-antiban';
+
+const recovery = messageRecovery(sock, {
+  onGapFilled: async (msg, chatJid) => {
+    // Wire to your existing messages.upsert handler
+    await handleMessage(msg, chatJid);
+  },
+  onGapTooLarge: async (gapMs) => {
+    console.warn(`Disconnect too long (${gapMs}ms) — manual reconciliation needed`);
+  },
+  persistPath: './recovery-state.json', // Optional
+  maxGapMs: 30 * 60_000, // 30 minutes (default)
+  maxTrackedChats: 1000, // LRU cap (default)
+});
+
+// Later: recovery.stop() to cleanup listeners + flush persistence
+```
+
+---
+
 ## [3.0.0] — 2026-04-25
 
 ### Breaking Changes
