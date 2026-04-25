@@ -64,6 +64,9 @@ export class TimelockGuard {
       this.state.errorCount = 0;
       this.config.onTimelockDetected?.(this.getState());
       this.scheduleResume();
+    } else if (this.state.isActive && wasActive) {
+      // Already locked but expiry updated — reschedule timer with new expiry
+      this.scheduleResume();
     }
 
     if (!this.state.isActive && wasActive) {

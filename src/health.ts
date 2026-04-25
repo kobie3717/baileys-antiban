@@ -158,7 +158,7 @@ export class HealthMonitor {
       score += 30;
       reasons.push(`${disconnects} disconnects in last hour (critical threshold)`);
     } else if (disconnects >= this.config.disconnectWarningThreshold) {
-      score += 15;
+      score += 30;
       reasons.push(`${disconnects} disconnects in last hour`);
     }
 
@@ -179,9 +179,9 @@ export class HealthMonitor {
     score = Math.max(0, score - Math.floor(minutesSinceLastBad * decayRate));
 
     let risk: BanRiskLevel;
-    if (score >= 85) risk = 'critical';
-    else if (score >= 60) risk = 'high';
-    else if (score >= 30) risk = 'medium';
+    if (score >= 80) risk = 'critical';
+    else if (score >= 40) risk = 'high';
+    else if (score >= 15) risk = 'medium';
     else risk = 'low';
 
     // Determine recommendation

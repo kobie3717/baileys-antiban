@@ -42,7 +42,7 @@ describe('HealthMonitor', () => {
       health.recordDisconnect(403);
 
       const status = health.getStatus();
-      expect(status.risk).toBeGreaterThanOrEqual('medium' as any);
+      expect(status.risk).toBe('high');
       expect(status.stats.forbiddenErrors).toBe(1);
     });
 
@@ -70,7 +70,7 @@ describe('HealthMonitor', () => {
       }
 
       const status = health.getStatus();
-      expect(status.risk).toBeGreaterThanOrEqual('medium' as any);
+      expect(status.risk).toBe('medium');
     });
   });
 
@@ -108,14 +108,14 @@ describe('HealthMonitor', () => {
       health.recordDisconnect(403);
 
       const status = health.getStatus();
-      expect(status.risk).toBeGreaterThanOrEqual('high' as any);
+      expect(status.risk).toBe('critical');
     });
 
     test('escalates to critical on logged out', () => {
       health.recordDisconnect(401);
 
       const status = health.getStatus();
-      expect(status.risk).toBeGreaterThanOrEqual('high' as any);
+      expect(status.risk).toBe('high');
       expect(status.score).toBeGreaterThanOrEqual(60);
     });
   });
@@ -223,7 +223,7 @@ describe('HealthMonitor', () => {
       // 2pts/min × 10 = 20 decayed, 40-20 = 20
       const status = monitor.getStatus();
       expect(status.score).toBe(20);
-      expect(status.risk).toBe('low'); // 20 < 30
+      expect(status.risk).toBe('medium'); // 20 >= 15 (new medium threshold)
     });
 
     test('recordReconnect does NOT reset lastBadEventTime', () => {

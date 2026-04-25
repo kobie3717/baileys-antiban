@@ -170,7 +170,7 @@ export class PostReconnectThrottle {
 
     // Calculate budget for current window
     const baselineRate = this.config.baselineRatePerMinute ? this.config.baselineRatePerMinute() : 8;
-    const allowedInWindow = Math.floor(baselineRate * multiplier);
+    const allowedInWindow = Math.max(1, Math.floor(baselineRate * multiplier));
 
     // Check if we're over budget
     if (this.sendsInCurrentWindow >= allowedInWindow) {
