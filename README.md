@@ -1,10 +1,12 @@
-# baileys-antiban
+# baileys-antiban — Anti-Ban Middleware for Baileys & WhatsApp Bots
 
 [![npm version](https://img.shields.io/npm/v/baileys-antiban.svg)](https://www.npmjs.com/package/baileys-antiban)
 [![Node.js Version](https://img.shields.io/node/v/baileys-antiban.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Transport-agnostic** anti-ban middleware — protect your WhatsApp number with human-like messaging patterns. Works with both [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
+**Drop-in anti-ban middleware for Baileys WhatsApp bots. Free, self-hosted, TypeScript-first. Whapi.Cloud alternative — zero monthly fees.**
+
+> Rate limiting with Gaussian jitter, 7-day warmup, session health monitoring, LID resolver, disconnect classification, contact graph enforcement — all in one `npm install`. Works with [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
 
 ## v2.0 New Features — Session Stability Module
 
@@ -322,6 +324,25 @@ const antiban = new AntiBan({
 ```
 
 **Why these features?** 2025-2026 ban research showed WhatsApp's ML models heavily weight reply-ratio (<10% = high risk), contact-graph distance (strangers = high risk), and temporal patterns (robotic timing = high risk). These modules address the three largest gaps in existing anti-ban libraries.
+
+## baileys-antiban vs Whapi.Cloud vs DIY rate limiting
+
+| Feature | baileys-antiban | Whapi.Cloud | DIY snippets |
+|---|---|---|---|
+| Price | **Free, MIT** | $49–$99/mo | Free |
+| WhatsApp API | Unofficial (Baileys) | Unofficial underneath | Unofficial (Baileys) |
+| Rate limiting | ✅ Gaussian jitter | ✅ Black box | ⚠️ Basic only |
+| Warmup schedule | ✅ 7-day ramp | ✅ Managed | ❌ None |
+| Session health monitor | ✅ Built-in | ✅ Managed | ❌ None |
+| LID/PN resolver | ✅ v2.0 | ❌ Unknown | ❌ None |
+| Disconnect classifier | ✅ Typed reasons | ❌ None | ❌ None |
+| Contact graph enforcement | ✅ v1.3 | ❌ None | ❌ None |
+| Self-hosted | ✅ Yes | ❌ No | ✅ Yes |
+| TypeScript | ✅ Full types | N/A | ❌ Rarely |
+| Customisable | ✅ Full control | ❌ None | ⚠️ Copy-paste |
+| Drop-in (existing bot) | ✅ One-line wrapper | ❌ Full migration | ❌ Rewrite |
+
+**Bottom line:** Whapi.Cloud charges $99/mo for managed Baileys under the hood — same unofficial API, same ban risk, zero customisation. baileys-antiban gives you more protection, free, with full source access.
 
 ## Why?
 
