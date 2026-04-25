@@ -5,7 +5,7 @@ export interface PersistedState {
   warmup: WarmUpState;
   knownChats: string[];
   savedAt: number;
-  version: number;
+  version: 3;
 }
 
 const KNOWN_CHATS_MAX = 1000;
