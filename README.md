@@ -385,7 +385,47 @@ npm install @oxidezap/baileyrs baileys-antiban
 
 Requires Node.js ≥16.
 
-## Quick Start
+## Quick Start (v3)
+
+```bash
+npm install baileys-antiban
+```
+
+```typescript
+import { AntiBan } from 'baileys-antiban';
+
+// Zero config — works immediately
+const ab = new AntiBan();
+
+// Or pick a preset
+const ab = new AntiBan('moderate');
+
+// Full control
+const ab = new AntiBan({
+  preset: 'moderate',
+  persist: './antiban-state.json',  // survives restarts
+  groupProfiles: true,               // stricter limits for groups
+  maxPerMinute: 15,                  // override any value
+});
+
+// Usage unchanged
+const result = await ab.beforeSend(jid, text);
+if (result.allowed) {
+  await new Promise(r => setTimeout(r, result.delayMs));
+  await sock.sendMessage(jid, { text });
+  ab.afterSend(jid, text);
+}
+```
+
+### CLI
+
+```bash
+npx baileys-antiban status --state ./antiban-state.json
+npx baileys-antiban warmup --simulate 7 --preset moderate
+npx baileys-antiban reset --state ./antiban-state.json
+```
+
+## Quick Start (Legacy)
 
 ### Option 1: Wrap Your Socket (Easiest)
 

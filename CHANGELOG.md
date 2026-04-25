@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] — 2026-04-25
+
+### Breaking Changes
+- Constructor now accepts `string | FlatConfig | undefined` — nested v2 config still works but logs deprecation warning
+- `WarmUpConfig.statePath` removed (use `persist` in AntiBanConfig instead)
+
+### New Features
+- **Zero-config:** `new AntiBan()` works with conservative defaults
+- **Presets:** `conservative` / `moderate` / `aggressive`
+- **State persistence:** `persist: './state.json'` — warmup + knownChats survive restarts
+- **Group profiles:** `groupProfiles: true` — stricter rate limits for @g.us and @newsletter JIDs
+- **Health decay:** Score recovers automatically (2pts/min severe, 5pts/min normal)
+- **CLI:** `npx baileys-antiban status|reset|warmup`
+
+### Bug Fixes
+- `statePath` in WarmUpConfig was declared but never implemented — replaced with working `persist` option
+- Health score never recovered after ban signals — fixed with time-based decay
+
+---
+
 ## [2.1.0] - 2026-04-19
 
 ### Added
