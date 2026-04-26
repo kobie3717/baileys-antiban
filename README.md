@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/baileys-antiban.svg)](https://www.npmjs.com/package/baileys-antiban)
 [![Node.js Version](https://img.shields.io/node/v/baileys-antiban.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![SLSA Provenance](https://img.shields.io/badge/SLSA-provenance%20signed-success?logo=sigstore)](https://github.com/kobie3717/baileys-antiban/actions/workflows/release.yml)
 [![Sister: baileys-keep-alive](https://img.shields.io/badge/sister-baileys--keep--alive-25D366)](https://github.com/kobie3717/baileys-keep-alive)
 
 **Drop-in anti-ban middleware for Baileys WhatsApp bots. Free, self-hosted, TypeScript-first. Whapi.Cloud alternative — zero monthly fees.**
@@ -1109,6 +1110,21 @@ import type {
 ## Contributing
 
 Contributions are welcome! Please open an issue before submitting a PR.
+
+## Supply Chain Security
+
+This package is published from GitHub Actions with **npm provenance** via [sigstore](https://www.sigstore.dev/). Every release tag (`v*`) produces a signed attestation tying the published artifact back to the exact source commit + workflow run.
+
+To verify a downloaded version:
+
+```bash
+npm install baileys-antiban
+npm view baileys-antiban@<version> dist.integrity
+# or fetch the attestation:
+gh attestation verify $(npm pack baileys-antiban@<version>) --owner kobie3717
+```
+
+Inspired by post-lotusbail (Sept 2025, 56K-download supply chain attack on a baileys variant) — the only Baileys-ecosystem package shipping signed releases as of v3.5+.
 
 ## Related Projects
 
