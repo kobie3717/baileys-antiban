@@ -16,6 +16,9 @@
  * @author Kobus Wentzel <kobie@pop.co.za>
  * @license MIT
  */
+import { createRequire } from 'node:module';
+// Create require for optional peer dependency loading in ESM
+const require = createRequire(import.meta.url);
 const NoopLogger = {
     info: () => { },
     warn: () => { },
@@ -48,10 +51,8 @@ export function proxyRotator(config) {
     let scheduledTimer = null;
     // Agent cache: map endpoint -> Agent (cleared on rotation)
     const agentCache = new Map();
-    // Lazy-load proxy agent libs
-    let socksProxyAgentImport = null;
-    let httpProxyAgentImport = null;
-    let httpsProxyAgentImport = null;
+    // Module cache for lazy-loaded proxy agents
+    const moduleCache = {};
     function buildProxyUrl(endpoint) {
         const { type, host, port, username, password } = endpoint;
         const auth = username && password ? `${username}:${password}@` : '';
@@ -66,41 +67,40 @@ export function proxyRotator(config) {
         let agent = null;
         try {
             if (endpoint.type === 'socks5' || endpoint.type === 'socks5h') {
-                if (!socksProxyAgentImport) {
-                    // Try synchronous require for CommonJS compatibility
+                if (!moduleCache['socks-proxy-agent']) {
                     try {
-                        socksProxyAgentImport = require('socks-proxy-agent');
+                        moduleCache['socks-proxy-agent'] = require('socks-proxy-agent');
                     }
                     catch {
                         logger.error?.('socks-proxy-agent not installed. Run: npm install socks-proxy-agent');
                         return null;
                     }
                 }
-                agent = new socksProxyAgentImport.SocksProxyAgent(url);
+                agent = new moduleCache['socks-proxy-agent'].SocksProxyAgent(url);
             }
             else if (endpoint.type === 'http') {
-                if (!httpProxyAgentImport) {
+                if (!moduleCache['http-proxy-agent']) {
                     try {
-                        httpProxyAgentImport = require('http-proxy-agent');
+                        moduleCache['http-proxy-agent'] = require('http-proxy-agent');
                     }
                     catch {
                         logger.error?.('http-proxy-agent not installed. Run: npm install http-proxy-agent');
                         return null;
                     }
                 }
-                agent = new httpProxyAgentImport.HttpProxyAgent(url);
+                agent = new moduleCache['http-proxy-agent'].HttpProxyAgent(url);
             }
             else if (endpoint.type === 'https') {
-                if (!httpsProxyAgentImport) {
+                if (!moduleCache['https-proxy-agent']) {
                     try {
-                        httpsProxyAgentImport = require('https-proxy-agent');
+                        moduleCache['https-proxy-agent'] = require('https-proxy-agent');
                     }
                     catch {
                         logger.error?.('https-proxy-agent not installed. Run: npm install https-proxy-agent');
                         return null;
                     }
                 }
-                agent = new httpsProxyAgentImport.HttpsProxyAgent(url);
+                agent = new moduleCache['https-proxy-agent'].HttpsProxyAgent(url);
             }
             else {
                 logger.error?.(`Unknown proxy type: ${endpoint.type}`);

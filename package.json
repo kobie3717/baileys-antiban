@@ -95,5 +95,10 @@
     "tsx": "^4.21.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.5"
+  },
+  "dependencies": {
+    "http-proxy-agent": "^9.0.0",
+    "https-proxy-agent": "^9.0.0",
+    "socks-proxy-agent": "^10.0.0"
   }
 }

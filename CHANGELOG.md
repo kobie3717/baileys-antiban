@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive stats: total rotations, per-trigger breakdowns, endpoint health dashboard
   - Production-ready error handling: graceful fallback when peer deps missing
 
+### Fixed
+- **proxyRotator**: Fixed ESM `require()` regression by using `createRequire()` from `node:module` for ESM-compatible synchronous module loading (caught by live SOCKS5 smoke test before publish)
+
 ### Why v3.5
 Per GapHunter analysis, WhatsApp's ban detection includes IP reputation scoring. Datacenter IPs (VPS) are flagged. Residential/4G proxies stay alive. Every Baileys implementation uses DIY proxy hacks — no library handles native proxy injection. `proxyRotator` closes that gap with production-grade rotation strategies, health tracking, and auto-failover.
 
