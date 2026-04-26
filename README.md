@@ -326,6 +326,42 @@ const antiban = new AntiBan({
 // No manual intervention needed
 ```
 
+#### WPM Typing Model (v3.4+)
+
+Real humans typing a 200-character message take 30-60 seconds with multiple `composing`/`paused` cycles. Bots that fire `composing` then immediately send (or never fire it) are detectable.
+
+```typescript
+import { PresenceChoreographer } from 'baileys-antiban';
+
+const choreo = new PresenceChoreographer({
+  enabled: true,
+  enableTypingModel: true,
+  typingWPM: 45,             // Average human typing speed
+  typingWPMStdDev: 15,       // Variance (slow/fast days)
+  thinkPauseProbability: 0.08, // 8% chance of mid-typing pause per 10 chars
+  thinkPauseMinMs: 800,
+  thinkPauseMaxMs: 3500,
+});
+
+// Before sending
+const messageText = "Hello, how are you doing today?";
+const plan = choreo.computeTypingPlan(messageText.length);
+
+// Execute typing plan (sends composing/paused updates)
+await choreo.executeTypingPlan(sock, jid, plan);
+
+// Send message
+await sock.sendMessage(jid, { text: messageText });
+```
+
+**How it works:**
+1. Samples WPM from Gaussian distribution (default: 45 WPM ± 15 stdDev)
+2. Converts to realistic typing duration: `(messageLength / charsPerSec) * 1000`
+3. Injects "think pauses" (0.8-3.5s) mid-typing at 8% probability per 10 chars
+4. Returns plan: `[{ state: 'composing', durationMs: 4200 }, { state: 'paused', durationMs: 950 }, ...]`
+5. Executes plan: fires `sendPresenceUpdate('composing'/'paused')` + sleeps for each step
+6. Supports AbortSignal for mid-plan cancellation
+
 **Why these features?** 2025-2026 ban research showed WhatsApp's ML models heavily weight reply-ratio (<10% = high risk), contact-graph distance (strangers = high risk), and temporal patterns (robotic timing = high risk). These modules address the three largest gaps in existing anti-ban libraries.
 
 ## baileys-antiban vs Whapi.Cloud vs DIY rate limiting

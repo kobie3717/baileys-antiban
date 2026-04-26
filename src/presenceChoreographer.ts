@@ -40,6 +40,24 @@ export interface PresenceChoreographerConfig {
   offlineGapMinMs?: number;
   /** Max offline gap duration in ms (default: 900000 = 15min) */
   offlineGapMaxMs?: number;
+  /** Enable WPM-based typing duration model (default: true when enabled) */
+  enableTypingModel?: boolean;
+  /** Mean typing speed in words per minute (default: 45) */
+  typingWPM?: number;
+  /** Std dev around the mean WPM (default: 15) — humans vary a lot */
+  typingWPMStdDev?: number;
+  /** Probability of "thinking pause" mid-typing per 10 chars (default: 0.08) */
+  thinkPauseProbability?: number;
+  /** Min think pause ms (default: 800) */
+  thinkPauseMinMs?: number;
+  /** Max think pause ms (default: 3500) */
+  thinkPauseMaxMs?: number;
+  /** Probability bot ALSO fires 'paused' state mid-cycle (default: 0.4) */
+  intermittentPausedProbability?: number;
+  /** Cap on total typing duration regardless of message length (default: 90_000 = 90s) */
+  typingMaxMs?: number;
+  /** Min typing duration even for short messages (default: 600 = 0.6s) */
+  typingMinMs?: number;
 }
 
 export interface PresenceChoreographerStats {
@@ -49,6 +67,9 @@ export interface PresenceChoreographerStats {
   readReceiptsDelayed: number;
   readReceiptsSkipped: number;
   currentHourLocal: number;
+  typingPlansComputed: number;
+  typingPlansExecuted: number;
+  totalTypingTimeMs: number;
 }
 
 const DEFAULT_CONFIG: Required<PresenceChoreographerConfig> = {
@@ -65,6 +86,15 @@ const DEFAULT_CONFIG: Required<PresenceChoreographerConfig> = {
   offlineGapProbability: 0.03,
   offlineGapMinMs: 300000,
   offlineGapMaxMs: 900000,
+  enableTypingModel: true,
+  typingWPM: 45,
+  typingWPMStdDev: 15,
+  thinkPauseProbability: 0.08,
+  thinkPauseMinMs: 800,
+  thinkPauseMaxMs: 3500,
+  intermittentPausedProbability: 0.4,
+  typingMaxMs: 90000,
+  typingMinMs: 600,
 };
 
 /**
@@ -104,6 +134,11 @@ const ACTIVITY_CURVES = {
   ],
 };
 
+export interface TypingPlanStep {
+  state: 'composing' | 'paused';
+  durationMs: number;
+}
+
 export class PresenceChoreographer {
   private config: Required<PresenceChoreographerConfig>;
   private stats = {
@@ -111,6 +146,9 @@ export class PresenceChoreographer {
     offlineGapsInjected: 0,
     readReceiptsDelayed: 0,
     readReceiptsSkipped: 0,
+    typingPlansComputed: 0,
+    typingPlansExecuted: 0,
+    totalTypingTimeMs: 0,
   };
 
   constructor(config: PresenceChoreographerConfig = {}) {
@@ -200,6 +238,137 @@ export class PresenceChoreographer {
   }
 
   /**
+   * Compute realistic typing duration for a message of given length.
+   * Includes Gaussian WPM variance + think-pause injection.
+   * Returns a "typing plan": array of { state, durationMs } steps the caller should execute sequentially.
+   *
+   *   plan = [
+   *     { state: 'composing', durationMs: 4200 },
+   *     { state: 'paused',    durationMs: 950 },   // think pause
+   *     { state: 'composing', durationMs: 6800 },
+   *     { state: 'paused',    durationMs: 600 },   // brief stop before send
+   *   ]
+   */
+  computeTypingPlan(messageLength: number): TypingPlanStep[] {
+    if (!this.config.enabled || !this.config.enableTypingModel) {
+      return [{ state: 'composing', durationMs: this.config.typingMinMs }];
+    }
+
+    this.stats.typingPlansComputed++;
+
+    // Handle empty message
+    if (messageLength === 0) {
+      return [{ state: 'composing', durationMs: this.config.typingMinMs }];
+    }
+
+    // 1. Sample WPM from Gaussian distribution
+    const wpmSample = this.clamp(
+      this.gaussianSample(this.config.typingWPM, this.config.typingWPMStdDev),
+      10,
+      120
+    );
+
+    // 2. Convert to chars/sec (WPM standard: 5 chars/word)
+    const cps = (wpmSample * 5) / 60;
+
+    // 3. Base typing time
+    const baseMs = (messageLength / cps) * 1000;
+
+    // 4. Clamp to min/max
+    const targetMs = this.clamp(baseMs, this.config.typingMinMs, this.config.typingMaxMs);
+
+    // 5. Build plan with think pauses
+    const plan: TypingPlanStep[] = [];
+    let remainingBudget = targetMs;
+    let position = 0;
+
+    // Walk through message in chunks of 10 chars
+    const chunkSize = 10;
+    const numChunks = Math.max(1, Math.ceil(messageLength / chunkSize));
+
+    for (let i = 0; i < numChunks && remainingBudget > 0; i++) {
+      const charsInChunk = Math.min(chunkSize, messageLength - position);
+      // Distribute remaining budget proportionally across remaining chunks
+      const remainingChunks = numChunks - i;
+      const chunkBudget = remainingBudget / remainingChunks;
+      const chunkTypingMs = Math.floor(Math.min(chunkBudget, remainingBudget));
+
+      if (chunkTypingMs <= 0) break;
+
+      // Should we inject a think pause after this chunk?
+      if (i > 0 && i < numChunks - 1 && Math.random() < this.config.thinkPauseProbability) {
+        // Add composing step
+        plan.push({ state: 'composing', durationMs: chunkTypingMs });
+        remainingBudget -= chunkTypingMs;
+
+        // Add think pause (don't subtract from typing budget)
+        const pauseMs = this.randomBetween(
+          this.config.thinkPauseMinMs,
+          this.config.thinkPauseMaxMs
+        );
+        plan.push({ state: 'paused', durationMs: pauseMs });
+      } else {
+        // Accumulate typing time
+        if (plan.length === 0 || plan[plan.length - 1].state === 'paused') {
+          plan.push({ state: 'composing', durationMs: chunkTypingMs });
+        } else {
+          plan[plan.length - 1].durationMs += chunkTypingMs;
+        }
+        remainingBudget -= chunkTypingMs;
+      }
+
+      position += charsInChunk;
+    }
+
+    // 6. Optional final pause before send
+    if (Math.random() < this.config.intermittentPausedProbability) {
+      const finalPauseMs = this.randomBetween(200, 800);
+      plan.push({ state: 'paused', durationMs: finalPauseMs });
+    }
+
+    // Ensure we have at least one composing step
+    if (plan.length === 0 || !plan.some(step => step.state === 'composing')) {
+      return [{ state: 'composing', durationMs: this.config.typingMinMs }];
+    }
+
+    return plan;
+  }
+
+  /**
+   * Execute a typing plan against a Baileys-shaped sock with sendPresenceUpdate(state, jid).
+   * Awaits each step's duration. Updates stats.
+   *
+   *   await choreo.executeTypingPlan(sock, jid, plan);
+   *   await sock.sendMessage(jid, content);
+   */
+  async executeTypingPlan(
+    sock: { sendPresenceUpdate: (state: string, jid: string) => Promise<void> | void },
+    jid: string,
+    plan: TypingPlanStep[],
+    options?: { signal?: AbortSignal }
+  ): Promise<void> {
+    this.stats.typingPlansExecuted++;
+
+    for (const step of plan) {
+      // Check abort signal
+      if (options?.signal?.aborted) {
+        // Restore presence to paused before throwing
+        await Promise.resolve(sock.sendPresenceUpdate('paused', jid));
+        throw new Error('Typing plan aborted');
+      }
+
+      // Update presence
+      await Promise.resolve(sock.sendPresenceUpdate(step.state, jid));
+
+      // Sleep for duration
+      await this.sleep(step.durationMs);
+
+      // Track total typing time
+      this.stats.totalTypingTimeMs += step.durationMs;
+    }
+  }
+
+  /**
    * Get statistics.
    */
   getStats(): PresenceChoreographerStats {
@@ -210,6 +379,9 @@ export class PresenceChoreographer {
       readReceiptsDelayed: this.stats.readReceiptsDelayed,
       readReceiptsSkipped: this.stats.readReceiptsSkipped,
       currentHourLocal: this.getLocalHour(),
+      typingPlansComputed: this.stats.typingPlansComputed,
+      typingPlansExecuted: this.stats.typingPlansExecuted,
+      totalTypingTimeMs: this.stats.totalTypingTimeMs,
     };
   }
 
@@ -222,6 +394,9 @@ export class PresenceChoreographer {
       offlineGapsInjected: 0,
       readReceiptsDelayed: 0,
       readReceiptsSkipped: 0,
+      typingPlansComputed: 0,
+      typingPlansExecuted: 0,
+      totalTypingTimeMs: 0,
     };
   }
 
@@ -250,5 +425,25 @@ export class PresenceChoreographer {
 
   private randomBetween(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  /**
+   * Generate Gaussian sample using Box-Muller transform.
+   * Returns a sample from N(mean, stdDev).
+   */
+  private gaussianSample(mean: number, stdDev: number): number {
+    // Box-Muller transform
+    const u1 = Math.random();
+    const u2 = Math.random();
+    const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    return mean + z0 * stdDev;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

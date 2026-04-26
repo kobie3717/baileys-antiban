@@ -39,6 +39,24 @@ export interface PresenceChoreographerConfig {
     offlineGapMinMs?: number;
     /** Max offline gap duration in ms (default: 900000 = 15min) */
     offlineGapMaxMs?: number;
+    /** Enable WPM-based typing duration model (default: true when enabled) */
+    enableTypingModel?: boolean;
+    /** Mean typing speed in words per minute (default: 45) */
+    typingWPM?: number;
+    /** Std dev around the mean WPM (default: 15) — humans vary a lot */
+    typingWPMStdDev?: number;
+    /** Probability of "thinking pause" mid-typing per 10 chars (default: 0.08) */
+    thinkPauseProbability?: number;
+    /** Min think pause ms (default: 800) */
+    thinkPauseMinMs?: number;
+    /** Max think pause ms (default: 3500) */
+    thinkPauseMaxMs?: number;
+    /** Probability bot ALSO fires 'paused' state mid-cycle (default: 0.4) */
+    intermittentPausedProbability?: number;
+    /** Cap on total typing duration regardless of message length (default: 90_000 = 90s) */
+    typingMaxMs?: number;
+    /** Min typing duration even for short messages (default: 600 = 0.6s) */
+    typingMinMs?: number;
 }
 export interface PresenceChoreographerStats {
     currentActivityFactor: number;
@@ -47,6 +65,13 @@ export interface PresenceChoreographerStats {
     readReceiptsDelayed: number;
     readReceiptsSkipped: number;
     currentHourLocal: number;
+    typingPlansComputed: number;
+    typingPlansExecuted: number;
+    totalTypingTimeMs: number;
+}
+export interface TypingPlanStep {
+    state: 'composing' | 'paused';
+    durationMs: number;
 }
 export declare class PresenceChoreographer {
     private config;
@@ -84,6 +109,31 @@ export declare class PresenceChoreographer {
         delayMs: number;
     };
     /**
+     * Compute realistic typing duration for a message of given length.
+     * Includes Gaussian WPM variance + think-pause injection.
+     * Returns a "typing plan": array of { state, durationMs } steps the caller should execute sequentially.
+     *
+     *   plan = [
+     *     { state: 'composing', durationMs: 4200 },
+     *     { state: 'paused',    durationMs: 950 },   // think pause
+     *     { state: 'composing', durationMs: 6800 },
+     *     { state: 'paused',    durationMs: 600 },   // brief stop before send
+     *   ]
+     */
+    computeTypingPlan(messageLength: number): TypingPlanStep[];
+    /**
+     * Execute a typing plan against a Baileys-shaped sock with sendPresenceUpdate(state, jid).
+     * Awaits each step's duration. Updates stats.
+     *
+     *   await choreo.executeTypingPlan(sock, jid, plan);
+     *   await sock.sendMessage(jid, content);
+     */
+    executeTypingPlan(sock: {
+        sendPresenceUpdate: (state: string, jid: string) => Promise<void> | void;
+    }, jid: string, plan: TypingPlanStep[], options?: {
+        signal?: AbortSignal;
+    }): Promise<void>;
+    /**
      * Get statistics.
      */
     getStats(): PresenceChoreographerStats;
@@ -93,4 +143,11 @@ export declare class PresenceChoreographer {
     reset(): void;
     private getLocalHour;
     private randomBetween;
+    private clamp;
+    /**
+     * Generate Gaussian sample using Box-Muller transform.
+     * Returns a sample from N(mean, stdDev).
+     */
+    private gaussianSample;
+    private sleep;
 }

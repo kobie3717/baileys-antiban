@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] — 2026-04-26
+
+### Added
+- **WPM-based typing duration model** — Realistic typing indicator patterns based on human typing speed
+  - `PresenceChoreographer.computeTypingPlan(messageLength)` — Generates realistic typing plan with Gaussian WPM variance
+  - `PresenceChoreographer.executeTypingPlan(sock, jid, plan)` — Executes multi-step typing/pause cycle
+  - Gaussian sampling (Box-Muller) for WPM variance (default: 45 WPM ± 15 stdDev, clamped 10-120)
+  - Think-pause injection: 8% probability per 10 chars, 0.8-3.5s pauses (humans pause mid-thought)
+  - Intermittent `paused` state (40% probability) before send for realism
+  - Configurable min/max typing duration caps (default: 0.6s - 90s)
+  - AbortSignal support for mid-plan cancellation
+  - New stats: `typingPlansComputed`, `typingPlansExecuted`, `totalTypingTimeMs`
+  - Zero new dependencies — pure TypeScript with Box-Muller transform
+
+### Why v3.4
+WhatsApp's ML models flag accounts that fire `composing` then immediately send, or never fire typing indicators at all. Real humans typing a 200-character message take 30-60 seconds with multiple typing/paused cycles. This is the missing signal layer that completes PresenceChoreographer's anti-detection coverage. The WPM model is the final piece of the presence choreography puzzle — realistic read receipts (v1.3), distraction pauses (v1.3), circadian rhythm (v1.3), and now typing duration.
+
+### Usage
+```ts
+import { PresenceChoreographer } from 'baileys-antiban';
+
+const choreo = new PresenceChoreographer({
+  enabled: true,
+  enableTypingModel: true,
+  typingWPM: 45,             // Average human typing speed
+  typingWPMStdDev: 15,       // Variance (slow/fast days)
+  thinkPauseProbability: 0.08,
+  thinkPauseMinMs: 800,
+  thinkPauseMaxMs: 3500,
+});
+
+// Before sending a message
+const messageText = "Hello, how are you doing today?";
+const plan = choreo.computeTypingPlan(messageText.length);
+
+// Execute typing plan
+await choreo.executeTypingPlan(sock, jid, plan);
+
+// Send actual message
+await sock.sendMessage(jid, { text: messageText });
+```
+
+### Technical Details
+- Plan structure: `Array<{ state: 'composing' | 'paused', durationMs: number }>`
+- WPM → chars/sec conversion: `(WPM × 5) / 60` (industry standard: 5 chars/word)
+- Think pauses are extras, not subtracted from base typing time (20% budget slack)
+- Composing chunks coalesced when no pause injected between them
+- AbortSignal cleanup: sets presence to `paused` before throwing
+- All existing PresenceChoreographer features remain unchanged and backward compatible
+
 ## [3.3.0] — 2026-04-26
 
 ### Added
