@@ -1,6 +1,6 @@
 {
   "name": "baileys-antiban",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "description": "Anti-ban middleware for Baileys WhatsApp bots. Rate limiting, warmup, health monitor, LID resolver, disconnect classifier. Free Whapi.Cloud alternative.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -75,6 +75,15 @@
       "optional": true
     },
     "@oxidezap/baileyrs": {
+      "optional": true
+    },
+    "socks-proxy-agent": {
+      "optional": true
+    },
+    "http-proxy-agent": {
+      "optional": true
+    },
+    "https-proxy-agent": {
       "optional": true
     }
   },

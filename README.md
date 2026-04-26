@@ -203,6 +203,91 @@ console.log(stats.throttledSendCount);   // Sends gated since reconnect
 
 **Why?** When WhatsApp reconnects after a disconnection, sending messages at full rate immediately can trigger rate limit alarms. The reconnect throttle gradually ramps up sending rate over 60 seconds, mimicking how a human would resume messaging after their internet came back.
 
+## Proxy Rotation (v3.5)
+
+WhatsApp's ban detection includes **IP reputation scoring**. Datacenter IPs (VPS) are flagged. Residential/4G proxies stay alive. No Baileys library handles native proxy injection — every implementation uses DIY hacks. `proxyRotator` closes that gap.
+
+### Features
+- Multi-strategy rotation: round-robin, random, least-recently-used, weighted (by health)
+- Auto-failover on endpoint failure
+- Health tracking with auto-resurrection after cooldown
+- Per-endpoint cooldown periods
+- Scheduled rotation for proactive IP rotation
+- Supports SOCKS5, SOCKS5H, HTTP, HTTPS proxies with auth
+
+### Basic Usage
+
+```typescript
+import { proxyRotator } from 'baileys-antiban';
+import { makeWASocket } from 'baileys';
+
+const rotator = proxyRotator({
+  pool: [
+    {
+      type: 'socks5',
+      host: 'proxy1.example.com',
+      port: 1080,
+      username: 'user',
+      password: 'pass',
+      label: 'Proxy1',
+    },
+    {
+      type: 'socks5',
+      host: 'proxy2.example.com',
+      port: 1080,
+      username: 'user',
+      password: 'pass',
+      label: 'Proxy2',
+      cooldownMs: 300_000, // 5-minute cooldown
+    },
+  ],
+  strategy: 'weighted', // Prefer healthier endpoints
+  rotateOn: ['disconnect', 'ban-warning'],
+  maxFailures: 3,
+  deadCooldownMs: 600_000, // 10 minutes
+});
+
+const sock = makeWASocket({
+  auth: state,
+  fetchAgent: rotator.currentAgent(), // Inject proxy
+});
+
+// Wire disconnect rotation
+sock.ev.on('connection.update', ({ connection }) => {
+  if (connection === 'close') {
+    rotator.rotate('disconnect');
+  }
+});
+
+// Check stats
+console.log(rotator.getStats());
+```
+
+### Advanced: Scheduled Rotation
+
+```typescript
+const rotator = proxyRotator({
+  pool: [...proxies],
+  rotateOn: ['scheduled', 'disconnect'],
+  scheduledIntervalMs: 3_600_000, // Rotate every hour
+  strategy: 'least-recently-used',
+});
+
+// Auto-rotates every hour + on disconnects
+```
+
+### Peer Dependencies
+
+Install proxy agent libraries for the protocols you use:
+
+```bash
+npm install socks-proxy-agent      # For SOCKS5/SOCKS5H
+npm install http-proxy-agent       # For HTTP
+npm install https-proxy-agent      # For HTTPS
+```
+
+All are optional peerDeps — only install what you need.
+
 ## LID / Phone Number Canonicalization
 
 WhatsApp migrated to **Linked Identity (LID)** in 2024. A contact now has two JID forms:

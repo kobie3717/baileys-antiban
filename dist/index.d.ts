@@ -35,3 +35,4 @@ export { messageRecovery, type MessageRecoveryConfig, type MessageRecoveryStats,
 export { generateFingerprint, applyFingerprint, type DeviceFingerprint, type DeviceFingerprintConfig, } from './deviceFingerprint.js';
 export { credsSnapshot, type CredsSnapshot, type CredsSnapshotConfig, } from './credsSnapshot.js';
 export { readReceiptVariance, type ReadReceiptVariance, type ReadReceiptVarianceConfig, } from './readReceiptVariance.js';
+export { proxyRotator, type ProxyEndpoint, type ProxyRotatorConfig, type ProxyRotatorStats, type ProxyRotatorHandle, } from './proxyRotator.js';

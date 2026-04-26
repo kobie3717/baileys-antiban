@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] — 2026-04-26
+
+### Added
+- **proxyRotator** — Native proxy injection with multi-strategy rotation and health tracking
+  - Closes the datacenter IP ban vector — WhatsApp's ML flags VPS IPs, residential/4G proxies stay alive
+  - Supports SOCKS5, SOCKS5H, HTTP, HTTPS proxies with auth
+  - 4 rotation strategies: round-robin, random, least-recently-used, weighted (by health)
+  - Auto-failover on endpoint failure with configurable dead thresholds (default: 3 failures)
+  - Health tracking: failure counters, dead-marking, auto-resurrection after cooldown (default: 10min)
+  - Per-endpoint cooldown periods to avoid hammering proxy providers
+  - Scheduled rotation for proactive IP rotation (configurable interval)
+  - Rotation triggers: manual, disconnect, ban-warning, scheduled (user-wired)
+  - Lazy-loaded proxy agent dependencies (optional peerDeps: socks-proxy-agent, http-proxy-agent, https-proxy-agent)
+  - Agent caching for performance (avoids re-creating agents on every request)
+  - Comprehensive stats: total rotations, per-trigger breakdowns, endpoint health dashboard
+  - Production-ready error handling: graceful fallback when peer deps missing
+
+### Why v3.5
+Per GapHunter analysis, WhatsApp's ban detection includes IP reputation scoring. Datacenter IPs (VPS) are flagged. Residential/4G proxies stay alive. Every Baileys implementation uses DIY proxy hacks — no library handles native proxy injection. `proxyRotator` closes that gap with production-grade rotation strategies, health tracking, and auto-failover.
+
+### Usage
+```ts
+import { proxyRotator } from 'baileys-antiban';
+import { makeWASocket } from 'baileys';
+
+const rotator = proxyRotator({
+  pool: [
+    { type: 'socks5', host: 'proxy1.example.com', port: 1080, username: 'user', password: 'pass', label: 'Proxy1' },
+    { type: 'socks5', host: 'proxy2.example.com', port: 1080, username: 'user', password: 'pass', label: 'Proxy2', cooldownMs: 300_000 },
+  ],
+  strategy: 'weighted', // Prefer healthier endpoints
+  rotateOn: ['disconnect', 'ban-warning'],
+  maxFailures: 3,
+  deadCooldownMs: 600_000, // 10 minutes
+});
+
+const sock = makeWASocket({
+  auth: state,
+  fetchAgent: rotator.currentAgent(), // Inject proxy into Baileys fetch
+});
+
+// Wire disconnect rotation
+sock.ev.on('connection.update', ({ connection }) => {
+  if (connection === 'close') {
+    rotator.rotate('disconnect');
+  }
+});
+
+// Wire ban-warning rotation (from sessionStability)
+monitor.onDegraded = () => {
+  rotator.rotate('ban-warning');
+};
+
+// Check stats
+console.log(rotator.getStats());
+```
+
+### Technical Details
+- Agent caching: agents are created once per endpoint and reused until rotation
+- Cooldown logic: endpoints are skipped if `Date.now() - lastUsedAt < cooldownMs`
+- Dead resurrection: auto-checks on rotation if `Date.now() - lastUsedAt >= deadCooldownMs`
+- Weighted strategy: `weight = 1 / (failures + 1)` for probabilistic health-biased selection
+- LRU strategy: prioritizes never-used endpoints, then oldest `lastUsedAt`
+- Peer dep handling: uses `require()` with try/catch, logs clear error on missing deps
+- Pool size 1: logs warning once, rotation becomes no-op
+- All endpoints dead: `currentAgent()` returns `null`, user code must handle
+
 ## [3.4.0] — 2026-04-26
 
 ### Added

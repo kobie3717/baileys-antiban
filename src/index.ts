@@ -93,3 +93,12 @@ export {
   type ReadReceiptVariance,
   type ReadReceiptVarianceConfig,
 } from './readReceiptVariance.js';
+
+// v3.5 new modules
+export {
+  proxyRotator,
+  type ProxyEndpoint,
+  type ProxyRotatorConfig,
+  type ProxyRotatorStats,
+  type ProxyRotatorHandle,
+} from './proxyRotator.js';

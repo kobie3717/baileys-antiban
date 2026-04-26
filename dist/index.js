@@ -47,3 +47,5 @@ export { messageRecovery } from './messageRecovery.js';
 export { generateFingerprint, applyFingerprint, } from './deviceFingerprint.js';
 export { credsSnapshot, } from './credsSnapshot.js';
 export { readReceiptVariance, } from './readReceiptVariance.js';
+// v3.5 new modules
+export { proxyRotator, } from './proxyRotator.js';
