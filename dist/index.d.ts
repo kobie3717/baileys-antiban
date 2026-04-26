@@ -32,3 +32,6 @@ export { resolveConfig, PRESETS, type AntiBanInput, type ResolvedConfig, type Pr
 export { StateManager, type PersistedState } from './persist.js';
 export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMultiplier, type RateLimits } from './profiles.js';
 export { messageRecovery, type MessageRecoveryConfig, type MessageRecoveryStats, type MessageRecoveryHandle } from './messageRecovery.js';
+export { generateFingerprint, applyFingerprint, type DeviceFingerprint, type DeviceFingerprintConfig, } from './deviceFingerprint.js';
+export { credsSnapshot, type CredsSnapshot, type CredsSnapshotConfig, } from './credsSnapshot.js';
+export { readReceiptVariance, type ReadReceiptVariance, type ReadReceiptVarianceConfig, } from './readReceiptVariance.js';

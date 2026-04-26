@@ -43,3 +43,7 @@ export { StateManager } from './persist.js';
 export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';
 // v3.1 new modules
 export { messageRecovery } from './messageRecovery.js';
+// v3.2 new modules
+export { generateFingerprint, applyFingerprint, } from './deviceFingerprint.js';
+export { credsSnapshot, } from './credsSnapshot.js';
+export { readReceiptVariance, } from './readReceiptVariance.js';

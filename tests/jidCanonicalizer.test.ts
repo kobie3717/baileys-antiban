@@ -1,3 +1,4 @@
+import { describe, test, expect, afterEach, beforeEach } from 'vitest';
 import { JidCanonicalizer } from '../src/jidCanonicalizer.js';
 import { LidResolver } from '../src/lidResolver.js';
 
@@ -358,6 +359,95 @@ describe('JidCanonicalizer', () => {
       expect(stats.inboundLearned).toBe(1);
       expect(stats.outboundCanonicalized).toBe(1);
       expect(stats.outboundPassthrough).toBe(1);
+    });
+  });
+
+  describe('canonicalKey', () => {
+    beforeEach(() => {
+      canonicalizer = new JidCanonicalizer({ enabled: true });
+    });
+
+    test('PN form returns thread:<digits>', () => {
+      const key = canonicalizer.canonicalKey('27825651069@s.whatsapp.net');
+      expect(key).toBe('thread:27825651069');
+    });
+
+    test('LID with known PN returns thread:<digits>', () => {
+      canonicalizer.resolver.learn({
+        lid: '123456789@lid',
+        pn: '27825651069@s.whatsapp.net',
+      });
+
+      const key = canonicalizer.canonicalKey('123456789@lid');
+      expect(key).toBe('thread:27825651069');
+
+      const stats = canonicalizer.getStats();
+      expect(stats.canonicalKeyHits).toBe(1);
+      expect(stats.canonicalKeyMisses).toBe(0);
+    });
+
+    test('LID without PN returns thread:lid:<digits>', () => {
+      const key = canonicalizer.canonicalKey('123456789@lid');
+      expect(key).toBe('thread:lid:123456789');
+
+      const stats = canonicalizer.getStats();
+      expect(stats.canonicalKeyHits).toBe(0);
+      expect(stats.canonicalKeyMisses).toBe(1);
+    });
+
+    test('Group JID returns thread:group:<id>', () => {
+      const key = canonicalizer.canonicalKey('1234567890-1234567890@g.us');
+      expect(key).toBe('thread:group:1234567890-1234567890');
+    });
+
+    test('Broadcast returns thread:broadcast:status', () => {
+      const key = canonicalizer.canonicalKey('status@broadcast');
+      expect(key).toBe('thread:broadcast:status');
+    });
+
+    test('Newsletter returns thread:newsletter:<id>', () => {
+      const key = canonicalizer.canonicalKey('abc123@newsletter');
+      expect(key).toBe('thread:newsletter:abc123');
+    });
+
+    test('Empty/null/malformed returns thread:invalid', () => {
+      expect(canonicalizer.canonicalKey('')).toBe('thread:invalid');
+      expect(canonicalizer.canonicalKey('   ')).toBe('thread:invalid');
+      expect(canonicalizer.canonicalKey('no-at-sign')).toBe('thread:invalid');
+    });
+
+    test('Normalizes case and whitespace', () => {
+      const key1 = canonicalizer.canonicalKey('  27825651069@s.whatsapp.net  ');
+      const key2 = canonicalizer.canonicalKey('27825651069@S.WHATSAPP.NET');
+      expect(key1).toBe('thread:27825651069');
+      expect(key2).toBe('thread:27825651069');
+    });
+
+    test('Stats counters increment correctly', () => {
+      canonicalizer.resolver.learn({
+        lid: '123@lid',
+        pn: '123@s.whatsapp.net',
+      });
+
+      // Hit: PN form
+      canonicalizer.canonicalKey('456@s.whatsapp.net');
+      expect(canonicalizer.getStats().canonicalKeyHits).toBe(1);
+      expect(canonicalizer.getStats().canonicalKeyMisses).toBe(0);
+
+      // Hit: LID with known PN
+      canonicalizer.canonicalKey('123@lid');
+      expect(canonicalizer.getStats().canonicalKeyHits).toBe(2);
+      expect(canonicalizer.getStats().canonicalKeyMisses).toBe(0);
+
+      // Miss: LID without PN
+      canonicalizer.canonicalKey('unknown@lid');
+      expect(canonicalizer.getStats().canonicalKeyHits).toBe(2);
+      expect(canonicalizer.getStats().canonicalKeyMisses).toBe(1);
+    });
+
+    test('Unknown domain returns thread:<domain>:<user>', () => {
+      const key = canonicalizer.canonicalKey('user@unknown.domain');
+      expect(key).toBe('thread:unknown.domain:user');
     });
   });
 });

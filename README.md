@@ -9,6 +9,8 @@
 
 > Rate limiting with Gaussian jitter, 7-day warmup, session health monitoring, LID resolver, disconnect classification, contact graph enforcement — all in one `npm install`. Works with [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
 
+> **New in v3.3:** [LID Migration Guide](./docs/lid-migration.md) — survive Baileys v7's @lid default with stable thread keys.
+
 ## v2.0 New Features — Session Stability Module
 
 ### What's New in v2.0

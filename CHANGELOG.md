@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] — 2026-04-26
+
+### Added
+- **`JidCanonicalizer.canonicalKey(jid)`** — Returns stable thread key for DB storage/indexing
+  - Solves the split-thread bug from Baileys v7 LID migration ([#1832](https://github.com/WhiskeySockets/Baileys/issues/1832))
+  - Always returns same key regardless of whether message arrives as `@lid` or `@s.whatsapp.net`
+  - Format: `thread:<digits>` for known contacts, `thread:lid:<digits>` for unknown, `thread:group:<id>` for groups
+  - Uses learned LID↔PN mappings when available, falls back to LID form when not
+  - Handles edge cases: groups, broadcasts, newsletters, empty/null inputs
+  - Tracks stats: `canonicalKeyHits` (PN known) vs `canonicalKeyMisses` (LID only)
+- **`docs/lid-migration.md`** — Comprehensive guide for surviving Baileys v7's LID migration
+  - Explains the three major bugs LID causes (#1832 split-thread, #1718 phone lookup, #2030 call routing)
+  - Full integration examples: learning from events, canonicalizing sends, stable DB keys
+  - Production setup with persistence, stats logging, cleanup
+  - Limitations and best practices
+
+### Why v3.3
+Baileys v7 made `@lid` the default JID format, but many apps still use `remoteJid` as their database thread key. This causes the same conversation to appear as two separate threads when messages arrive under different forms. `canonicalKey()` provides a stable, form-independent identifier that prevents this split-thread bug. The LID migration doc owns the narrative for the v7 transition.
+
 ## [3.2.0] — 2026-04-26
 
 ### New Features

@@ -39,6 +39,8 @@ export interface JidCanonicalizerStats {
     outboundCanonicalized: number;
     outboundPassthrough: number;
     inboundLearned: number;
+    canonicalKeyHits: number;
+    canonicalKeyMisses: number;
 }
 export declare class JidCanonicalizer {
     private config;
@@ -54,6 +56,23 @@ export declare class JidCanonicalizer {
      * Called by wrapper on every outbound send. Returns canonical JID.
      */
     canonicalizeTarget(jid: string): string;
+    /**
+     * Returns a stable, canonical thread key for storage / DB indexing.
+     *
+     * Different from `canonicalizeTarget()` (which picks the right send target):
+     * - canonicalizeTarget('1234@lid') → '+27...@s.whatsapp.net' (best send target)
+     * - canonicalKey('1234@lid')      → 'thread:27...'  (stable thread identifier)
+     *
+     * If LID has known PN mapping → use phone-number form
+     * If only LID known → use LID stripped of suffix
+     * Always lowercase, no @-suffix, prefixed with `thread:`
+     *
+     * Apps using this as their DB key won't double-thread on LID/PN drift.
+     *
+     * @param jid - WhatsApp JID (can be PN, LID, group, or broadcast)
+     * @returns Stable thread key for DB indexing
+     */
+    canonicalKey(jid: string): string;
     /**
      * Called by wrapper on messages.upsert event. Learns mappings.
      */

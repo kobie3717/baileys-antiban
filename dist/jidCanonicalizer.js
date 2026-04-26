@@ -35,6 +35,8 @@ export class JidCanonicalizer {
         outboundCanonicalized: 0,
         outboundPassthrough: 0,
         inboundLearned: 0,
+        canonicalKeyHits: 0,
+        canonicalKeyMisses: 0,
     };
     constructor(config = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
@@ -71,6 +73,72 @@ export class JidCanonicalizer {
         return canonical;
     }
     /**
+     * Returns a stable, canonical thread key for storage / DB indexing.
+     *
+     * Different from `canonicalizeTarget()` (which picks the right send target):
+     * - canonicalizeTarget('1234@lid') → '+27...@s.whatsapp.net' (best send target)
+     * - canonicalKey('1234@lid')      → 'thread:27...'  (stable thread identifier)
+     *
+     * If LID has known PN mapping → use phone-number form
+     * If only LID known → use LID stripped of suffix
+     * Always lowercase, no @-suffix, prefixed with `thread:`
+     *
+     * Apps using this as their DB key won't double-thread on LID/PN drift.
+     *
+     * @param jid - WhatsApp JID (can be PN, LID, group, or broadcast)
+     * @returns Stable thread key for DB indexing
+     */
+    canonicalKey(jid) {
+        // Defensive: handle null/undefined/empty
+        if (!jid || typeof jid !== 'string' || jid.trim() === '') {
+            return 'thread:invalid';
+        }
+        const normalized = jid.trim().toLowerCase();
+        // Extract parts: user@domain
+        const atIndex = normalized.indexOf('@');
+        if (atIndex === -1) {
+            return 'thread:invalid';
+        }
+        const user = normalized.substring(0, atIndex);
+        const domain = normalized.substring(atIndex + 1);
+        // Handle special domains
+        if (domain === 'g.us') {
+            // Group chat
+            return `thread:group:${user}`;
+        }
+        if (domain === 'broadcast') {
+            // Broadcast list
+            return `thread:broadcast:${user}`;
+        }
+        if (domain === 'newsletter') {
+            // Newsletter (WA Channels)
+            return `thread:newsletter:${user}`;
+        }
+        // Handle @s.whatsapp.net (PN form)
+        if (domain === 's.whatsapp.net') {
+            this.stats.canonicalKeyHits++;
+            return `thread:${user}`;
+        }
+        // Handle @lid form
+        if (domain === 'lid') {
+            // Try to resolve to PN via learned mappings
+            const mapping = this.lidResolver.getMapping(normalized);
+            if (mapping?.pn) {
+                // We have a PN mapping — use it
+                const pnUser = mapping.pn.split('@')[0];
+                this.stats.canonicalKeyHits++;
+                return `thread:${pnUser}`;
+            }
+            else {
+                // No PN known yet — use LID form
+                this.stats.canonicalKeyMisses++;
+                return `thread:lid:${user}`;
+            }
+        }
+        // Unknown domain — return generic form
+        return `thread:${domain}:${user}`;
+    }
+    /**
      * Called by wrapper on messages.upsert event. Learns mappings.
      */
     onIncomingEvent(upsert) {
@@ -102,6 +170,8 @@ export class JidCanonicalizer {
             outboundCanonicalized: this.stats.outboundCanonicalized,
             outboundPassthrough: this.stats.outboundPassthrough,
             inboundLearned: this.stats.inboundLearned,
+            canonicalKeyHits: this.stats.canonicalKeyHits,
+            canonicalKeyMisses: this.stats.canonicalKeyMisses,
         };
     }
     destroy() {
