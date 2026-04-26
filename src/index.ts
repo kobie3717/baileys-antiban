@@ -73,3 +73,23 @@ export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMu
 
 // v3.1 new modules
 export { messageRecovery, type MessageRecoveryConfig, type MessageRecoveryStats, type MessageRecoveryHandle } from './messageRecovery.js';
+
+// v3.2 new modules
+export {
+  generateFingerprint,
+  applyFingerprint,
+  type DeviceFingerprint,
+  type DeviceFingerprintConfig,
+} from './deviceFingerprint.js';
+
+export {
+  credsSnapshot,
+  type CredsSnapshot,
+  type CredsSnapshotConfig,
+} from './credsSnapshot.js';
+
+export {
+  readReceiptVariance,
+  type ReadReceiptVariance,
+  type ReadReceiptVarianceConfig,
+} from './readReceiptVariance.js';

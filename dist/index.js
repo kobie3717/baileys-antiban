@@ -41,3 +41,5 @@ export { FileStateAdapter } from './stateAdapter.js';
 export { resolveConfig, PRESETS } from './presets.js';
 export { StateManager } from './persist.js';
 export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';
+// v3.1 new modules
+export { messageRecovery } from './messageRecovery.js';

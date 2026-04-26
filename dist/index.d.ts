@@ -31,3 +31,4 @@ export { type StateAdapter, FileStateAdapter } from './stateAdapter.js';
 export { resolveConfig, PRESETS, type AntiBanInput, type ResolvedConfig, type PresetName } from './presets.js';
 export { StateManager, type PersistedState } from './persist.js';
 export { isGroup, isNewsletter, isBroadcast, shouldUseGroupProfile, applyGroupMultiplier, type RateLimits } from './profiles.js';
+export { messageRecovery, type MessageRecoveryConfig, type MessageRecoveryStats, type MessageRecoveryHandle } from './messageRecovery.js';

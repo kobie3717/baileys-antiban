@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] — 2026-04-26
+
+### New Features
+- **deviceFingerprint** — Randomizes appVersion, osVersion, and deviceModel to prevent Meta's clientPayload fingerprinting (the #1 gap in anti-ban coverage per GapHunter analysis)
+  - Randomizes appVersion patch number within safe range (e.g. 2.24.5.18 → 2.24.5.[15-22])
+  - Randomizes osVersion (Android versions 10-14)
+  - Randomizes deviceModel from pool of 12 real-world devices (Pixel, Galaxy, Xiaomi, OnePlus, etc.)
+  - Deterministic PRNG seeded from sessionId for stable fingerprints per session
+  - `generateFingerprint()` creates unique fingerprint per session
+  - `applyFingerprint()` applies to Baileys SocketConfig before makeWASocket()
+  - User-configurable pools for custom device/OS combinations
+  - Master switch: `enabled: false` to disable all randomization
+- **credsSnapshot** — Atomic credentials backup to prevent code-500 corruption loop
+  - `take()` creates atomic snapshot of creds.json before risky operations
+  - `restoreLatest()` recovers from most recent snapshot
+  - Automatic rotation keeps only N newest snapshots (default: 3)
+  - Atomic file operations (write to .tmp, rename) prevent partial writes
+  - Graceful handling of missing creds file (no crashes)
+- **readReceiptVariance** — Randomizes read receipt timing to avoid instant-read bot signals
+  - Gaussian-jittered delay before sending read receipts (mean: 1500ms, stdDev: 800ms)
+  - Configurable min/max clamps (default: 200-8000ms)
+  - Skips variance for backlog messages (older than 60s by default)
+  - `wrap()` proxies sock.readMessages with transparent delay injection
+  - `delayMs()` for manual delay computation in custom receipt logic
+  - Box-Muller transform for realistic human timing variance
+  - `stop()` cancels all pending timers on disconnect
+
+### Why v3.2
+Per GapHunter analysis, device fingerprint randomization is the single highest-ROI ban-prevention upgrade. Baileys ships identical clientPayload for every instance — Meta literally fingerprints it. This release closes that gap plus two critical operational gaps (creds corruption, instant-read bot detection).
+
+### Usage
+```ts
+import { generateFingerprint, applyFingerprint, credsSnapshot, readReceiptVariance } from 'baileys-antiban';
+
+// 1. Device fingerprint randomization
+const fp = generateFingerprint({ seed: 'my-session-123' });
+const sock = makeWASocket(applyFingerprint(socketConfig, fp));
+
+// 2. Atomic creds snapshot
+const snapshot = credsSnapshot({ credsPath: './auth/creds.json', keep: 5 });
+await snapshot.take(); // Before risky reconnect
+// ... on code-500 corruption:
+await snapshot.restoreLatest();
+
+// 3. Read receipt variance
+const variance = readReceiptVariance({ meanMs: 2000, stdDevMs: 1000 });
+const wrappedSock = variance.wrap(sock);
+// Now all readMessages() calls have human-like delays
+```
+
+### Technical Details
+- Zero runtime dependencies (Box-Muller in pure JS, fs from Node stdlib)
+- TypeScript strict mode compliant
+- Deterministic PRNG (mulberry32) for reproducible testing
+- Atomic file operations prevent corruption on crash
+- All modules are standalone and can be used independently
+
+---
+
 ## [3.1.0] — 2026-04-25
 
 ### New Features
