@@ -17,6 +17,11 @@ const DEFAULT_CONFIG = {
     enableCircadianRhythm: true,
     timezone: 'UTC',
     activityCurve: 'office',
+    circadian: {
+        enabled: true,
+        profile: 'default',
+        timezone: 'UTC',
+    },
     distractionPauseProbability: 0.05,
     distractionPauseMinMs: 300000,
     distractionPauseMaxMs: 1200000,
@@ -72,6 +77,88 @@ const ACTIVITY_CURVES = {
         0.6, 0.5, 0.5, 0.5, 0.5, 0.5, // 19-24: night taper
     ],
 };
+/**
+ * Get circadian delay multiplier based on hour of day.
+ * Returns a multiplier to apply to base delays (typing, presence, etc.).
+ *
+ * Multiplier ranges:
+ * - Awake hours (09:00-22:00): ~0.8-1.2 (near baseline)
+ * - Evening (22:00-00:00): 1.2 → 2.5
+ * - Late night (00:00-02:00): 2.5 → 4.0
+ * - Dead zone (02:00-06:00): 4.0-6.0 (peak slow)
+ * - Early morning (06:00-09:00): 4.0 → 1.0
+ *
+ * Uses cosine-based smooth transitions (not stepped).
+ *
+ * @param date - Date to check (uses hour from this)
+ * @param profile - Circadian profile ('default' | 'nightOwl' | 'earlyBird' | 'always_on')
+ * @param timezone - IANA timezone (optional, defaults to local)
+ * @returns Delay multiplier (0.5 = 2x faster, 2.0 = 2x slower, 5.0 = 5x slower)
+ */
+export function getCircadianMultiplier(date = new Date(), profile = 'default', timezone) {
+    // always_on profile returns flat 1.0
+    if (profile === 'always_on') {
+        return 1.0;
+    }
+    // Get hour in specified timezone
+    let hour;
+    if (timezone) {
+        try {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour: 'numeric',
+                hour12: false,
+            });
+            const parts = formatter.formatToParts(date);
+            const hourPart = parts.find(p => p.type === 'hour');
+            hour = hourPart ? parseInt(hourPart.value, 10) : date.getHours();
+        }
+        catch {
+            hour = date.getHours();
+        }
+    }
+    else {
+        hour = date.getHours();
+    }
+    // Apply profile shift
+    let shiftedHour = hour;
+    if (profile === 'nightOwl') {
+        shiftedHour = (hour - 3 + 24) % 24; // shift +3hr (active until 02:00, dead 04:00-09:00)
+    }
+    else if (profile === 'earlyBird') {
+        shiftedHour = (hour + 2) % 24; // shift -2hr (active 06:00-20:00, dead 23:00-04:00)
+    }
+    // Cosine-based smooth curve
+    // Model: slow at night (02:00-06:00), fast during day (09:00-22:00)
+    // Use piecewise cosine for smooth transitions
+    if (shiftedHour >= 9 && shiftedHour < 22) {
+        // Awake hours: 09:00-22:00 — baseline ~0.8-1.2
+        // Add slight variance: cosine wave with period 13 hours
+        const t = (shiftedHour - 9) / 13;
+        return 1.0 + 0.2 * Math.cos(2 * Math.PI * t);
+    }
+    else if (shiftedHour >= 22 && shiftedHour < 24) {
+        // Evening: 22:00-00:00 — ramp 1.2 → 2.5
+        const t = (shiftedHour - 22) / 2;
+        return 1.2 + 1.3 * t;
+    }
+    else if (shiftedHour >= 0 && shiftedHour < 2) {
+        // Late night: 00:00-02:00 — ramp 2.5 → 4.0
+        const t = shiftedHour / 2;
+        return 2.5 + 1.5 * t;
+    }
+    else if (shiftedHour >= 2 && shiftedHour < 6) {
+        // Dead zone: 02:00-06:00 — peak slow 4.0-6.0
+        // Use cosine for smooth peak
+        const t = (shiftedHour - 2) / 4;
+        return 5.0 + 1.0 * Math.cos(Math.PI * t); // peaks at 6.0 around 04:00
+    }
+    else {
+        // Early morning: 06:00-09:00 — ramp 4.0 → 1.0
+        const t = (shiftedHour - 6) / 3;
+        return 4.0 - 3.0 * t;
+    }
+}
 export class PresenceChoreographer {
     config;
     stats = {
@@ -84,7 +171,14 @@ export class PresenceChoreographer {
         totalTypingTimeMs: 0,
     };
     constructor(config = {}) {
-        this.config = { ...DEFAULT_CONFIG, ...config };
+        this.config = {
+            ...DEFAULT_CONFIG,
+            ...config,
+            circadian: {
+                ...DEFAULT_CONFIG.circadian,
+                ...(config.circadian || {}),
+            },
+        };
     }
     /**
      * Get current activity factor (0.1 to 1.0).
@@ -133,6 +227,7 @@ export class PresenceChoreographer {
      * Check if should mark message as read.
      * Returns { mark: false } if skip probability hit.
      * Returns { mark: true, delayMs: 5000 } otherwise.
+     * Applies circadian multiplier to delay.
      */
     shouldMarkRead() {
         if (!this.config.enabled) {
@@ -144,13 +239,19 @@ export class PresenceChoreographer {
             return { mark: false, delayMs: 0 };
         }
         // Delayed read receipt
-        const delayMs = this.randomBetween(this.config.readReceiptDelayMinMs, this.config.readReceiptDelayMaxMs);
+        const baseDelayMs = this.randomBetween(this.config.readReceiptDelayMinMs, this.config.readReceiptDelayMaxMs);
+        // Apply circadian multiplier if enabled
+        let delayMs = baseDelayMs;
+        if (this.config.circadian.enabled) {
+            const circadianMultiplier = getCircadianMultiplier(new Date(), this.config.circadian.profile, this.config.circadian.timezone);
+            delayMs = Math.floor(baseDelayMs * circadianMultiplier);
+        }
         this.stats.readReceiptsDelayed++;
         return { mark: true, delayMs };
     }
     /**
      * Compute realistic typing duration for a message of given length.
-     * Includes Gaussian WPM variance + think-pause injection.
+     * Includes Gaussian WPM variance + think-pause injection + circadian timing multiplier.
      * Returns a "typing plan": array of { state, durationMs } steps the caller should execute sequentially.
      *
      *   plan = [
@@ -175,9 +276,14 @@ export class PresenceChoreographer {
         const cps = (wpmSample * 5) / 60;
         // 3. Base typing time
         const baseMs = (messageLength / cps) * 1000;
-        // 4. Clamp to min/max
-        const targetMs = this.clamp(baseMs, this.config.typingMinMs, this.config.typingMaxMs);
-        // 5. Build plan with think pauses
+        // 4. Apply circadian multiplier if enabled
+        let circadianMultiplier = 1.0;
+        if (this.config.circadian.enabled) {
+            circadianMultiplier = getCircadianMultiplier(new Date(), this.config.circadian.profile, this.config.circadian.timezone);
+        }
+        // 5. Clamp to min/max
+        const targetMs = this.clamp(baseMs * circadianMultiplier, this.config.typingMinMs, this.config.typingMaxMs);
+        // 6. Build plan with think pauses
         const plan = [];
         let remainingBudget = targetMs;
         let position = 0;
@@ -197,8 +303,9 @@ export class PresenceChoreographer {
                 // Add composing step
                 plan.push({ state: 'composing', durationMs: chunkTypingMs });
                 remainingBudget -= chunkTypingMs;
-                // Add think pause (don't subtract from typing budget)
-                const pauseMs = this.randomBetween(this.config.thinkPauseMinMs, this.config.thinkPauseMaxMs);
+                // Add think pause (apply circadian multiplier to pause durations too)
+                const basePauseMs = this.randomBetween(this.config.thinkPauseMinMs, this.config.thinkPauseMaxMs);
+                const pauseMs = Math.floor(basePauseMs * circadianMultiplier);
                 plan.push({ state: 'paused', durationMs: pauseMs });
             }
             else {
@@ -213,12 +320,13 @@ export class PresenceChoreographer {
             }
             position += charsInChunk;
         }
-        // 6. Optional final pause before send
+        // 7. Optional final pause before send (apply circadian multiplier)
         if (Math.random() < this.config.intermittentPausedProbability) {
-            const finalPauseMs = this.randomBetween(200, 800);
+            const baseFinalPauseMs = this.randomBetween(200, 800);
+            const finalPauseMs = Math.floor(baseFinalPauseMs * circadianMultiplier);
             plan.push({ state: 'paused', durationMs: finalPauseMs });
         }
-        // Ensure we have at least one composing step
+        // 8. Ensure we have at least one composing step
         if (plan.length === 0 || !plan.some(step => step.state === 'composing')) {
             return [{ state: 'composing', durationMs: this.config.typingMinMs }];
         }

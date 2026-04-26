@@ -18,7 +18,14 @@ export { TimelockGuard, type TimelockGuardConfig, type TimelockState } from './t
 // v1.3 new modules
 export { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './replyRatio.js';
 export { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats, type ContactState } from './contactGraph.js';
-export { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats, type TypingPlanStep } from './presenceChoreographer.js';
+export {
+  PresenceChoreographer,
+  type PresenceChoreographerConfig,
+  type PresenceChoreographerStats,
+  type TypingPlanStep,
+  type CircadianProfile,
+  getCircadianMultiplier,
+} from './presenceChoreographer.js';
 
 // v1.5 new modules
 export { RetryReasonTracker, type RetryTrackerConfig, type RetryStats, type RetryReason } from './retryTracker.js';

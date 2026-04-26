@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-04-26
+
+### Added
+- Circadian timing curve in presenceChoreographer — typing/composing delays now scale with hour of day. Late-night messages get 4-6x slower presence to match human sleep patterns. Configurable via `circadian.profile` (default | nightOwl | earlyBird | always_on) and `circadian.timezone` (IANA).
+- Exported `getCircadianMultiplier(date, profile)` for downstream use.
+- Smooth cosine-based transitions between time periods (no stepped changes).
+- Circadian multiplier applied to typing durations, think pauses, read receipt delays.
+- Four built-in profiles: `default` (9-22 awake), `nightOwl` (+3hr shift), `earlyBird` (-2hr shift), `always_on` (flat 1.0 for 24/7 bots).
+- Timezone-aware hour calculation using `Intl.DateTimeFormat` for correct local time.
+
+### Why v3.6
+Per GapHunter competitive analysis, competitor `whatsapp-ai-framework` ships circadian response timing (slower at night). WhatsApp ban heuristics likely flag accounts that respond instantly at 04:00 AM. Real humans respond fast 09:00-22:00, slow late-night, near-zero 02:00-06:00. This release closes that gap.
+
 ## [3.5.0] — 2026-04-26
 
 ### Added

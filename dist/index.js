@@ -16,7 +16,7 @@ export { TimelockGuard } from './timelockGuard.js';
 // v1.3 new modules
 export { ReplyRatioGuard } from './replyRatio.js';
 export { ContactGraphWarmer } from './contactGraph.js';
-export { PresenceChoreographer } from './presenceChoreographer.js';
+export { PresenceChoreographer, getCircadianMultiplier, } from './presenceChoreographer.js';
 // v1.5 new modules
 export { RetryReasonTracker } from './retryTracker.js';
 export { PostReconnectThrottle } from './reconnectThrottle.js';

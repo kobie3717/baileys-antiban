@@ -12,6 +12,21 @@
 
 > **New in v3.3:** [LID Migration Guide](./docs/lid-migration.md) — survive Baileys v7's @lid default with stable thread keys.
 
+## Why Trust This Package
+
+The npm WhatsApp ecosystem has a malware problem. In April 2026, [`lotusbail`](https://www.koi.ai/blog/npm-package-with-56k-downloads-malware-stealing-whatsapp-messages) — an "anti-ban" package with 56,000 downloads — was confirmed to be exfiltrating session credentials and stealing WhatsApp messages. Picking the wrong package puts every user's chats and your business in someone else's pocket.
+
+`baileys-antiban` is built to be the answer to that risk:
+
+- **SLSA-signed releases** — every published version ships with a [Sigstore-verifiable provenance](https://github.com/kobie3717/baileys-antiban/actions/workflows/release.yml) chain. Tampering between source and registry is detectable.
+- **Zero telemetry** — no analytics, no remote config, no phone-home. The package never opens a network socket of its own. Audit `src/` and `dist/` and confirm.
+- **No obfuscated code** — published artifacts are readable, source-mapped TypeScript. No minified blobs hiding payloads.
+- **Minimal, pinned dependencies** — runtime deps listed in `package.json`, every one a known Baileys-ecosystem package.
+- **Open-source and auditable** — MIT-licensed. Every line at [github.com/kobie3717/baileys-antiban](https://github.com/kobie3717/baileys-antiban). 43+ stars, public review.
+- **Used in production** — powers [WhatsAuction](https://whatsauction.co.za) live. The author dogfoods this on his own customers' bots.
+
+If you can't read the code yourself, lean on these signals: signed releases, public audit trail, no telemetry, and a real product behind it. That's the floor. Everything below is the feature set.
+
 ## v2.0 New Features — Session Stability Module
 
 ### What's New in v2.0
@@ -447,6 +462,40 @@ await sock.sendMessage(jid, { text: messageText });
 4. Returns plan: `[{ state: 'composing', durationMs: 4200 }, { state: 'paused', durationMs: 950 }, ...]`
 5. Executes plan: fires `sendPresenceUpdate('composing'/'paused')` + sleeps for each step
 6. Supports AbortSignal for mid-plan cancellation
+
+#### Circadian Timing (v3.6+)
+
+Real humans respond fast during the day, slow at night, near-zero at 2-6 AM. WhatsApp's ban heuristics likely flag accounts that respond instantly at 04:00 AM. Circadian timing adds a day/night delay multiplier to all presence timings.
+
+```typescript
+import { wrapSocket } from 'baileys-antiban';
+
+const sock = wrapSocket(rawSock, {
+  presence: {
+    circadian: {
+      enabled: true,
+      profile: 'default',     // 'default' | 'nightOwl' | 'earlyBird' | 'always_on'
+      timezone: 'Africa/Johannesburg', // IANA timezone
+    },
+  },
+});
+```
+
+**Profiles:**
+- `default` — Awake 09:00-22:00, slow 22:00-02:00, dead zone 02:00-06:00 (4-6x slower), ramp 06:00-09:00
+- `nightOwl` — Peaks shifted +3hr (active until 02:00, dead 04:00-09:00)
+- `earlyBird` — Peaks shifted -2hr (active 06:00-20:00, dead 23:00-04:00)
+- `always_on` — Flat 1.0 multiplier (opt-out for 24/7 support bots)
+
+Multiplier is applied to typing durations, think pauses, and read receipt delays. Uses smooth cosine-based transitions (not stepped).
+
+**Direct usage:**
+```typescript
+import { getCircadianMultiplier } from 'baileys-antiban';
+
+const multiplier = getCircadianMultiplier(new Date(), 'default', 'Africa/Johannesburg');
+const adjustedDelay = baseDelay * multiplier;
+```
 
 **Why these features?** 2025-2026 ban research showed WhatsApp's ML models heavily weight reply-ratio (<10% = high risk), contact-graph distance (strangers = high risk), and temporal patterns (robotic timing = high risk). These modules address the three largest gaps in existing anti-ban libraries.
 

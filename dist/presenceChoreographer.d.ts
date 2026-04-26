@@ -12,6 +12,7 @@
  * flagged at 3x rate vs accounts with circadian patterns. Human users have
  * 40-60% variance in hourly activity.
  */
+export type CircadianProfile = 'default' | 'nightOwl' | 'earlyBird' | 'always_on';
 export interface PresenceChoreographerConfig {
     /** Enable presence choreography (default: false — opt-in) */
     enabled?: boolean;
@@ -21,6 +22,12 @@ export interface PresenceChoreographerConfig {
     timezone?: string;
     /** Activity curve preset (default: 'office') */
     activityCurve?: 'office' | 'social' | 'global';
+    /** Circadian timing configuration (default: enabled with 'default' profile) */
+    circadian?: {
+        enabled?: boolean;
+        profile?: CircadianProfile;
+        timezone?: string;
+    };
     /** Probability (0-1) of distraction pause per send (default: 0.05 = 5%) */
     distractionPauseProbability?: number;
     /** Min distraction pause duration in ms (default: 300000 = 5min) */
@@ -73,6 +80,25 @@ export interface TypingPlanStep {
     state: 'composing' | 'paused';
     durationMs: number;
 }
+/**
+ * Get circadian delay multiplier based on hour of day.
+ * Returns a multiplier to apply to base delays (typing, presence, etc.).
+ *
+ * Multiplier ranges:
+ * - Awake hours (09:00-22:00): ~0.8-1.2 (near baseline)
+ * - Evening (22:00-00:00): 1.2 → 2.5
+ * - Late night (00:00-02:00): 2.5 → 4.0
+ * - Dead zone (02:00-06:00): 4.0-6.0 (peak slow)
+ * - Early morning (06:00-09:00): 4.0 → 1.0
+ *
+ * Uses cosine-based smooth transitions (not stepped).
+ *
+ * @param date - Date to check (uses hour from this)
+ * @param profile - Circadian profile ('default' | 'nightOwl' | 'earlyBird' | 'always_on')
+ * @param timezone - IANA timezone (optional, defaults to local)
+ * @returns Delay multiplier (0.5 = 2x faster, 2.0 = 2x slower, 5.0 = 5x slower)
+ */
+export declare function getCircadianMultiplier(date?: Date, profile?: CircadianProfile, timezone?: string): number;
 export declare class PresenceChoreographer {
     private config;
     private stats;
@@ -103,6 +129,7 @@ export declare class PresenceChoreographer {
      * Check if should mark message as read.
      * Returns { mark: false } if skip probability hit.
      * Returns { mark: true, delayMs: 5000 } otherwise.
+     * Applies circadian multiplier to delay.
      */
     shouldMarkRead(): {
         mark: boolean;
@@ -110,7 +137,7 @@ export declare class PresenceChoreographer {
     };
     /**
      * Compute realistic typing duration for a message of given length.
-     * Includes Gaussian WPM variance + think-pause injection.
+     * Includes Gaussian WPM variance + think-pause injection + circadian timing multiplier.
      * Returns a "typing plan": array of { state, durationMs } steps the caller should execute sequentially.
      *
      *   plan = [
