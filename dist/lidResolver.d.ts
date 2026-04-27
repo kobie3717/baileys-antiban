@@ -72,6 +72,22 @@ export declare class LidResolver {
      */
     getMapping(jid: string): LidMapping | null;
     /**
+     * Learn LID↔PN mappings from group metadata participants.
+     * Call this after fetchGroupMetadata() to pre-populate the map.
+     * Supports both {id: '@lid', phoneNumber: '@s.whatsapp.net'} and
+     * {id: '@s.whatsapp.net', lid: '@lid'} participant formats (v7 + v6 shapes).
+     *
+     * @param participants - Group metadata participants array from Baileys
+     * @returns Number of new mappings learned
+     */
+    learnFromGroupMetadata(participants: Array<{
+        id: string;
+        lid?: string;
+        phoneNumber?: string;
+        phone?: string;
+        number?: string;
+    }>): number;
+    /**
      * Seed from persistence (called automatically in constructor if persistence provided)
      */
     hydrate(): Promise<void>;

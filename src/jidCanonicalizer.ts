@@ -192,6 +192,27 @@ export class JidCanonicalizer {
   }
 
   /**
+   * Learn LID↔PN mappings from group metadata participants.
+   * Call after fetchGroupMetadata() to pre-populate the resolver map.
+   * No-op if canonicalization is disabled.
+   *
+   * @param participants - Group metadata participants array from Baileys
+   * @returns Number of new mappings learned (0 if disabled)
+   */
+  learnFromGroupMetadata(participants: Array<{
+    id: string;
+    lid?: string;
+    phoneNumber?: string;
+    phone?: string;
+    number?: string;
+  }>): number {
+    if (!this.config.enabled || !this.config.learnFromEvents) {
+      return 0;
+    }
+    return this.lidResolver.learnFromGroupMetadata(participants);
+  }
+
+  /**
    * Called by wrapper on messages.update event. Learns from sent-message refs.
    */
   onMessageUpdate(updates: Array<any>): void {
