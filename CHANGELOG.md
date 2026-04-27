@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-04-27
+
+### Added
+- `LidResolver.learnFromGroupMetadata(participants)` — ingest LID↔PN mappings from Baileys group metadata. Supports v6 (`id: '@s.whatsapp.net', lid: '@lid'`) and v7 (`id: '@lid', phoneNumber: '@s.whatsapp.net'`) participant formats.
+- `JidCanonicalizer.learnFromGroupMetadata(participants)` — passthrough to `LidResolver.learnFromGroupMetadata()`.
+
+### Fixed
+- Confirmed compatibility with Baileys v7.0.0-rc.9 LID migration. `resolveCanonical()` correctly falls back to original JID when LID→PN mapping is unknown (no throw).
+
+### Notes
+- Default `enabled: false` unchanged — opt-in as always.
+- Group metadata learning is the recommended way to pre-populate LID mappings for auction groups where `getCachedGroupMetadata()` is called anyway.
+
 ## [3.6.1] - 2026-04-26
 
 ### Changed

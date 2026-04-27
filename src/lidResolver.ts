@@ -227,6 +227,42 @@ export class LidResolver {
   }
 
   /**
+   * Learn LID↔PN mappings from group metadata participants.
+   * Call this after fetchGroupMetadata() to pre-populate the map.
+   * Supports both {id: '@lid', phoneNumber: '@s.whatsapp.net'} and
+   * {id: '@s.whatsapp.net', lid: '@lid'} participant formats (v7 + v6 shapes).
+   *
+   * @param participants - Group metadata participants array from Baileys
+   * @returns Number of new mappings learned
+   */
+  learnFromGroupMetadata(participants: Array<{
+    id: string;
+    lid?: string;
+    phoneNumber?: string;
+    phone?: string;
+    number?: string;
+  }>): number {
+    let learned = 0;
+    for (const p of participants) {
+      const domain = p.id.split('@')[1] || '';
+      if (domain === 'lid' && (p.phoneNumber || p.phone || p.number)) {
+        const pn = p.phoneNumber || (p.phone ? `${p.phone}@s.whatsapp.net` : null) || (p.number ? `${p.number}@s.whatsapp.net` : null);
+        if (pn) {
+          const prevSize = this.lidToPn.size;
+          this.learn({ lid: p.id, pn });
+          if (this.lidToPn.size > prevSize) learned++;
+        }
+      } else if (domain === 's.whatsapp.net' && p.lid) {
+        const lid = p.lid.endsWith('@lid') ? p.lid : `${p.lid}@lid`;
+        const prevSize = this.lidToPn.size;
+        this.learn({ lid, pn: p.id });
+        if (this.lidToPn.size > prevSize) learned++;
+      }
+    }
+    return learned;
+  }
+
+  /**
    * Seed from persistence (called automatically in constructor if persistence provided)
    */
   async hydrate(): Promise<void> {
