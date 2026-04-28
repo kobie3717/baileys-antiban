@@ -109,3 +109,17 @@ export {
   type ProxyRotatorStats,
   type ProxyRotatorHandle,
 } from './proxyRotator.js';
+
+// v3.6 new modules (Obscura-inspired)
+export {
+  generateSessionFingerprint,
+  applySessionFingerprint,
+  getMessageSendJitter,
+  getTypingJitter,
+  getRetryJitter,
+  getVoiceNoteMetadata,
+  getBatteryState,
+  createStealthFingerprint,
+  type SessionFingerprint,
+  type SessionFingerprintConfig,
+} from './sessionFingerprint.js';

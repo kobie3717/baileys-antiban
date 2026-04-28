@@ -49,3 +49,5 @@ export { credsSnapshot, } from './credsSnapshot.js';
 export { readReceiptVariance, } from './readReceiptVariance.js';
 // v3.5 new modules
 export { proxyRotator, } from './proxyRotator.js';
+// v3.6 new modules (Obscura-inspired)
+export { generateSessionFingerprint, applySessionFingerprint, getMessageSendJitter, getTypingJitter, getRetryJitter, getVoiceNoteMetadata, getBatteryState, createStealthFingerprint, } from './sessionFingerprint.js';
