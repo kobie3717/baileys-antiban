@@ -599,6 +599,21 @@ npx baileys-antiban warmup --simulate 7 --preset moderate
 npx baileys-antiban reset --state ./antiban-state.json
 ```
 
+### Stealth Connect (v3.8.0)
+
+Bots that instantly snap online and start blasting messages look suspicious. Stealth connect delays presence ramp to look more human.
+
+```typescript
+import { makeWASocket } from '@whiskeysockets/baileys';
+import { getStealthSocketConfig, rampPresenceAfterConnect } from 'baileys-antiban';
+
+const config = getStealthSocketConfig({ os: 'My Custom App' });
+const sock = makeWASocket({ ...config, auth: state });
+
+// Wait 30-90s, then go available (or fire-and-forget)
+await rampPresenceAfterConnect(sock, { minDelayMs: 45000, maxDelayMs: 120000 });
+```
+
 ## Quick Start (Legacy)
 
 ### Option 1: Wrap Your Socket (Easiest)

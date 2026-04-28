@@ -123,3 +123,9 @@ export {
   type SessionFingerprint,
   type SessionFingerprintConfig,
 } from './sessionFingerprint.js';
+
+// v3.8 new modules
+export {
+  getStealthSocketConfig,
+  rampPresenceAfterConnect,
+} from './stealthConnect.js';

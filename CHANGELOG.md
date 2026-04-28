@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-04-28
+
+### Added
+- **Stealth Connect** — Gradual presence ramp to reduce ban signals. Inspired by GOWA's `--presence-on-connect=unavailable` flag. Bots that instantly snap online and start blasting messages look suspicious. New helpers:
+  - `getStealthSocketConfig({ os?: string })` — returns socket config with `markOnlineOnConnect: false` and sensible browser defaults.
+  - `rampPresenceAfterConnect(sock, { minDelayMs?, maxDelayMs?, targetState? })` — waits 30-90s (configurable), then transitions presence to `available` (or custom state). Call after socket connects. Returns a promise.
+- Use together: connect silently, ramp presence gradually when ready to act.
+
 ## [3.7.0] - 2026-04-27
 
 ### Added
