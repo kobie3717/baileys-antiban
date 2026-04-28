@@ -1,100 +1,138 @@
-import { getStealthSocketConfig, rampPresenceAfterConnect } from '../src/stealthConnect.js';
+import {
+  getStealthSocketConfig,
+  rampPresenceAfterConnect,
+  STEALTH_BROWSER_POOL,
+  AbortError,
+} from '../src/stealthConnect.js';
 
 describe('stealthConnect', () => {
   describe('getStealthSocketConfig', () => {
-    test('returns config with markOnlineOnConnect false', () => {
+    test('returns config with markOnlineOnConnect=false', () => {
       const config = getStealthSocketConfig();
       expect(config.markOnlineOnConnect).toBe(false);
-      expect(config.browser).toEqual(['Ubuntu', 'Chrome', '20.0.04']);
     });
 
-    test('propagates custom os value when provided', () => {
-      const config = getStealthSocketConfig({ os: 'CustomApp' });
-      expect(config.markOnlineOnConnect).toBe(false);
-      // os field is in auth, not socket config — we just verify it doesn't break
-      expect(config).toBeDefined();
-    });
-
-    test('returns default browser tuple when no os provided', () => {
+    test('default browser tuple is picked from STEALTH_BROWSER_POOL', () => {
       const config = getStealthSocketConfig();
       expect(config.browser).toHaveLength(3);
-      expect(config.browser[0]).toBe('Ubuntu');
+      const isFromPool = STEALTH_BROWSER_POOL.some(
+        (tuple) =>
+          tuple[0] === config.browser[0] &&
+          tuple[1] === config.browser[1] &&
+          tuple[2] === config.browser[2]
+      );
+      expect(isFromPool).toBe(true);
+    });
+
+    test('explicit browser opt overrides pool', () => {
+      const config = getStealthSocketConfig({
+        browser: ['CustomApp', 'CustomBrowser', '1.2.3'],
+      });
+      expect(config.browser).toEqual(['CustomApp', 'CustomBrowser', '1.2.3']);
+    });
+
+    test('os opt rewrites first slot of randomly picked tuple', () => {
+      const config = getStealthSocketConfig({ os: 'MyApp' });
+      expect(config.browser[0]).toBe('MyApp');
+      const isBrowserVersionFromPool = STEALTH_BROWSER_POOL.some(
+        (tuple) => tuple[1] === config.browser[1] && tuple[2] === config.browser[2]
+      );
+      expect(isBrowserVersionFromPool).toBe(true);
+    });
+
+    test('explicit browser takes precedence over os', () => {
+      const config = getStealthSocketConfig({
+        os: 'IgnoredOs',
+        browser: ['ExplicitApp', 'ExplicitBrowser', '9.9.9'],
+      });
+      expect(config.browser).toEqual([
+        'ExplicitApp',
+        'ExplicitBrowser',
+        '9.9.9',
+      ]);
+    });
+
+    test('custom random function is honoured', () => {
+      // Force the random pick to always select index 0.
+      const config = getStealthSocketConfig({ random: () => 0 });
+      expect(config.browser).toEqual(STEALTH_BROWSER_POOL[0]);
     });
   });
 
   describe('rampPresenceAfterConnect', () => {
-    test('calls sendPresenceUpdate after delay window', async () => {
+    test('calls sendPresenceUpdate with default state after delay window', async () => {
       jest.useFakeTimers();
+      const sock = { sendPresenceUpdate: jest.fn() };
 
-      const mockSock = {
-        sendPresenceUpdate: jest.fn(),
-      };
-
-      // Start the ramp (30-90s default)
-      const rampPromise = rampPresenceAfterConnect(mockSock);
-
-      // Should not call immediately
-      expect(mockSock.sendPresenceUpdate).not.toHaveBeenCalled();
-
-      // Fast-forward to max delay (90s)
-      jest.advanceTimersByTime(90000);
-
-      // Wait for promise to resolve
-      await rampPromise;
-
-      // Should have called with default 'available'
-      expect(mockSock.sendPresenceUpdate).toHaveBeenCalledWith('available', undefined);
-      expect(mockSock.sendPresenceUpdate).toHaveBeenCalledTimes(1);
-
-      jest.useRealTimers();
-    });
-
-    test('respects custom delay range', async () => {
-      jest.useFakeTimers();
-
-      const mockSock = {
-        sendPresenceUpdate: jest.fn(),
-      };
-
-      // Start with custom range (10-20s)
-      const rampPromise = rampPresenceAfterConnect(mockSock, {
-        minDelayMs: 10000,
-        maxDelayMs: 20000,
+      const promise = rampPresenceAfterConnect(sock, {
+        minDelayMs: 1000,
+        maxDelayMs: 2000,
+        random: () => 1,
       });
 
-      // Should not call after 5s
-      jest.advanceTimersByTime(5000);
-      expect(mockSock.sendPresenceUpdate).not.toHaveBeenCalled();
+      expect(sock.sendPresenceUpdate).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(2000);
+      await promise;
 
-      // Fast-forward to max delay (20s)
-      jest.advanceTimersByTime(15000);
-
-      await rampPromise;
-
-      expect(mockSock.sendPresenceUpdate).toHaveBeenCalledWith('available', undefined);
-
+      expect(sock.sendPresenceUpdate).toHaveBeenCalledWith(
+        'available',
+        undefined
+      );
       jest.useRealTimers();
     });
 
     test('respects custom targetState', async () => {
       jest.useFakeTimers();
+      const sock = { sendPresenceUpdate: jest.fn() };
 
-      const mockSock = {
-        sendPresenceUpdate: jest.fn(),
-      };
-
-      const rampPromise = rampPresenceAfterConnect(mockSock, {
-        minDelayMs: 1000,
-        maxDelayMs: 2000,
+      const promise = rampPresenceAfterConnect(sock, {
+        minDelayMs: 100,
+        maxDelayMs: 200,
         targetState: 'unavailable',
+        random: () => 0.5,
       });
 
-      jest.advanceTimersByTime(2000);
+      jest.advanceTimersByTime(200);
+      await promise;
 
-      await rampPromise;
+      expect(sock.sendPresenceUpdate).toHaveBeenCalledWith(
+        'unavailable',
+        undefined
+      );
+      jest.useRealTimers();
+    });
 
-      expect(mockSock.sendPresenceUpdate).toHaveBeenCalledWith('unavailable', undefined);
+    test('rejects immediately if signal already aborted', async () => {
+      const sock = { sendPresenceUpdate: jest.fn() };
+      const ac = new AbortController();
+      ac.abort();
 
+      await expect(rampPresenceAfterConnect(sock, { signal: ac.signal })).rejects.toBeInstanceOf(
+        AbortError
+      );
+      expect(sock.sendPresenceUpdate).not.toHaveBeenCalled();
+    });
+
+    test('aborting during delay cancels the presence update', async () => {
+      jest.useFakeTimers();
+      const sock = { sendPresenceUpdate: jest.fn() };
+      const ac = new AbortController();
+
+      const promise = rampPresenceAfterConnect(sock, {
+        minDelayMs: 5000,
+        maxDelayMs: 5000,
+        signal: ac.signal,
+      });
+
+      // Reach mid-delay then abort.
+      jest.advanceTimersByTime(2500);
+      ac.abort();
+
+      await expect(promise).rejects.toBeInstanceOf(AbortError);
+      // Even after the original timer would have fired, no presence update
+      // should have been sent.
+      jest.advanceTimersByTime(10000);
+      expect(sock.sendPresenceUpdate).not.toHaveBeenCalled();
       jest.useRealTimers();
     });
   });

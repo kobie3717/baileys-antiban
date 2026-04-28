@@ -128,4 +128,11 @@ export {
 export {
   getStealthSocketConfig,
   rampPresenceAfterConnect,
+  STEALTH_BROWSER_POOL,
+  AbortError,
+  type BrowserTuple,
+  type StealthSocketConfig,
+  type GetStealthSocketConfigOptions,
+  type RampPresenceOptions,
+  type PresenceCapableSocket,
 } from './stealthConnect.js';
