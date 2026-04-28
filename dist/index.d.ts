@@ -37,4 +37,4 @@ export { credsSnapshot, type CredsSnapshot, type CredsSnapshotConfig, } from './
 export { readReceiptVariance, type ReadReceiptVariance, type ReadReceiptVarianceConfig, } from './readReceiptVariance.js';
 export { proxyRotator, type ProxyEndpoint, type ProxyRotatorConfig, type ProxyRotatorStats, type ProxyRotatorHandle, } from './proxyRotator.js';
 export { generateSessionFingerprint, applySessionFingerprint, getMessageSendJitter, getTypingJitter, getRetryJitter, getVoiceNoteMetadata, getBatteryState, createStealthFingerprint, type SessionFingerprint, type SessionFingerprintConfig, } from './sessionFingerprint.js';
-export { getStealthSocketConfig, rampPresenceAfterConnect, } from './stealthConnect.js';
+export { getStealthSocketConfig, rampPresenceAfterConnect, STEALTH_BROWSER_POOL, AbortError, type BrowserTuple, type StealthSocketConfig, type GetStealthSocketConfigOptions, type RampPresenceOptions, type PresenceCapableSocket, } from './stealthConnect.js';

@@ -52,4 +52,4 @@ export { proxyRotator, } from './proxyRotator.js';
 // v3.6 new modules (Obscura-inspired)
 export { generateSessionFingerprint, applySessionFingerprint, getMessageSendJitter, getTypingJitter, getRetryJitter, getVoiceNoteMetadata, getBatteryState, createStealthFingerprint, } from './sessionFingerprint.js';
 // v3.8 new modules
-export { getStealthSocketConfig, rampPresenceAfterConnect, } from './stealthConnect.js';
+export { getStealthSocketConfig, rampPresenceAfterConnect, STEALTH_BROWSER_POOL, AbortError, } from './stealthConnect.js';

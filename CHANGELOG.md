@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.1] - 2026-04-28
+
+### Fixed
+- **`getStealthSocketConfig({ os })` now propagates `os` properly.** v3.8.0 silently dropped the value (placeholder no-op spread). The `os` opt rewrites the first slot of the resulting browser tuple as documented.
+- **Browser fingerprint randomized.** v3.8.0 hardcoded `['Ubuntu', 'Chrome', '20.0.04']` for every consumer — identical fingerprint across the install base is trivially cluster-able by WhatsApp. Now picks at random from `STEALTH_BROWSER_POOL`, a frozen array of realistic Mac/Windows/Linux Chrome/Safari/Firefox/Edge tuples with real-world version strings. Pool is exported so callers can extend or override.
+- **`rampPresenceAfterConnect()` accepts `AbortSignal`.** v3.8.0 had no way to cancel the pending timer; if the socket disconnected during the ramp window the post-delay `sendPresenceUpdate` would run against a dead socket. New `signal` option causes the returned promise to reject with `AbortError` when aborted, and clears the timer.
+- **Structural types instead of `any`.** `sock` parameter now typed as `PresenceCapableSocket` (matches `presenceChoreographer.ts`). `getStealthSocketConfig()` returns a typed `StealthSocketConfig`. Consumers get autocomplete on `markOnlineOnConnect` / `browser`.
+- JSDoc claims corrected — removed phantom `os` default value.
+
+### Added
+- `STEALTH_BROWSER_POOL` (named export) — frozen pool of realistic browser tuples used by `getStealthSocketConfig()`.
+- `AbortError` (named export) — thrown when `rampPresenceAfterConnect` is aborted via signal. Mirrors DOM `AbortError` semantics.
+- New typed exports: `BrowserTuple`, `StealthSocketConfig`, `GetStealthSocketConfigOptions`, `RampPresenceOptions`, `PresenceCapableSocket`.
+- `random` opt on both helpers — inject custom RNG (useful for deterministic tests).
+- `browser` opt on `getStealthSocketConfig()` — supply an explicit tuple. Takes precedence over `os` and the pool.
+
+### Migration
+- v3.8.0 → v3.8.1 is non-breaking. The shape of the returned config is unchanged at runtime; the default browser tuple is now random rather than fixed. If you depended on the exact `['Ubuntu', 'Chrome', '20.0.04']` value, pass it explicitly via `browser: ['Ubuntu', 'Chrome', '20.0.04']`.
+
 ## [3.8.0] - 2026-04-28
 
 ### Added
