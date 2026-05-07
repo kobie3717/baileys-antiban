@@ -101,7 +101,9 @@ export function wrapSocket<T extends WASocket>(
         for (const update of updates) {
           // 463 error detection
           if (update?.update?.messageStubParameters) {
-            const params = update.update.messageStubParameters;
+            const params = Array.isArray(update.update.messageStubParameters)
+              ? update.update.messageStubParameters
+              : [];
             if (params.includes(463) || params.includes('463')) {
               antiban.timelock.record463Error();
             }
@@ -243,6 +245,11 @@ export function wrapSocket<T extends WASocket>(
   // Create proxy that intercepts sendMessage
   const originalSendMessage = sock.sendMessage.bind(sock);
 
+  // Serializes beforeSend→afterSend so rate limiter accounting is accurate
+  // under concurrent sends. Without this, all concurrent callers read the same
+  // committed state before any afterSend records, bypassing per-minute limits.
+  let sendLock: Promise<void> = Promise.resolve();
+
   const wrappedSendMessage = async (jid: string, content: any, options?: any) => {
     /**
      * LID/PN Canonicalization — Normalize JID to canonical form
@@ -259,31 +266,40 @@ export function wrapSocket<T extends WASocket>(
     // Extract text content for rate limiter analysis
     const text = content?.text || content?.caption || content?.image?.caption || '';
 
-    const decision = await antiban.beforeSend(canonicalJid, text);
+    // Chain this send onto the previous — each waits for the prior send's
+    // afterSend to commit before running its own beforeSend check.
+    const sendResult = sendLock.then(async () => {
+      const decision = await antiban.beforeSend(canonicalJid, text);
 
-    if (!decision.allowed) {
-      throw new Error(`[baileys-antiban] Message blocked: ${decision.reason}`);
-    }
-
-    // Apply delay
-    if (decision.delayMs > 0) {
-      await new Promise(resolve => setTimeout(resolve, decision.delayMs));
-    }
-
-    // Send message (using canonical JID)
-    try {
-      const result = await originalSendMessage(canonicalJid, content, options);
-      antiban.afterSend(canonicalJid, text);
-      antiban.timelock.registerKnownChat(canonicalJid);
-      // Clear retry tracking on successful send
-      if (result?.key?.id) {
-        antiban.retryTracker.clear(result.key.id);
+      if (!decision.allowed) {
+        throw new Error(`[baileys-antiban] Message blocked: ${decision.reason}`);
       }
-      return result;
-    } catch (error) {
-      antiban.afterSendFailed(error instanceof Error ? error.message : String(error));
-      throw error;
-    }
+
+      // Apply delay
+      if (decision.delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, decision.delayMs));
+      }
+
+      // Send message (using canonical JID)
+      try {
+        const result = await originalSendMessage(canonicalJid, content, options);
+        antiban.afterSend(canonicalJid, text);
+        antiban.timelock.registerKnownChat(canonicalJid);
+        // Clear retry tracking on successful send
+        if (result?.key?.id) {
+          antiban.retryTracker.clear(result.key.id);
+        }
+        return result;
+      } catch (error) {
+        antiban.afterSendFailed(error instanceof Error ? error.message : String(error));
+        throw error;
+      }
+    });
+
+    // Advance the lock regardless of success/failure so the chain never stalls
+    sendLock = sendResult.then(() => {}, () => {});
+
+    return sendResult;
   };
 
   // Return enhanced socket

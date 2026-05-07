@@ -90,6 +90,7 @@
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "^20.0.0",
+    "baileys": "github:WhiskeySockets/Baileys#dfad98f815feb771cc561f32707a00c6e085b1f1",
     "jest": "^29.7.0",
     "ts-jest": "^29.4.9",
     "tsx": "^4.21.0",
