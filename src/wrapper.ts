@@ -101,7 +101,9 @@ export function wrapSocket<T extends WASocket>(
         for (const update of updates) {
           // 463 error detection
           if (update?.update?.messageStubParameters) {
-            const params = update.update.messageStubParameters;
+            const params = Array.isArray(update.update.messageStubParameters)
+              ? update.update.messageStubParameters
+              : [];
             if (params.includes(463) || params.includes('463')) {
               antiban.timelock.record463Error();
             }
