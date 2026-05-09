@@ -61,10 +61,11 @@ export class RetryReasonTracker {
         const msgId = update.key?.id;
         if (!msgId)
             return;
-        // Only track error statuses
+        // Only track error statuses (status 0 = error in Baileys WAMessageStatus)
         if (update.status !== 0 && !update.error)
             return;
-        const reason = this.classify(update.error || update);
+        // rc10 may surface error info in update.update (wrapped message); check all forms
+        const reason = this.classify(update.error || update.update || update);
         this.recordRetry(msgId, reason);
     }
     /**

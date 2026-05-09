@@ -54,6 +54,7 @@ export declare class RetryReasonTracker {
             id?: string;
         };
         status?: number;
+        update?: any;
         error?: any;
     }): void;
     /**

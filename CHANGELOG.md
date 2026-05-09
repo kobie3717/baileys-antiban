@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.3] - 2026-05-09
+
+### Fixed
+- **Compiled dist now ships with rc10 fixes.** v3.8.2 published stale dist to npm — the sendLock serialization, `fetchMessageHistory` defensive guard, and `retryTracker` rc10 path were in source but not in the published package. v3.8.3 corrects this.
+- **`sendMessage` concurrent send serialization.** Wraps each send in a `sendLock` promise chain so `beforeSend`→`afterSend` accounting is serialized. Without this, all concurrent callers read the same committed rate-limiter state before any `afterSend` records, allowing burst sends to bypass per-minute limits.
+- **`messageRecovery`: defensive `fetchMessageHistory` guard.** Baileys v7 may change this signature. Now catches any error, logs a one-time warning, and skips recovery for that reconnect rather than crashing the handler.
+- **`retryTracker`: rc10 `update.update` path.** Baileys rc10 wraps error info in `update.update` rather than `update.error` in some cases. Classifier now checks all three forms.
+
 ## [3.8.1] - 2026-04-28
 
 ### Fixed

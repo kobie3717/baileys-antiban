@@ -152,12 +152,20 @@ export function messageRecovery(sock, config) {
         }
         for (const [jid, lastSeenEntry] of chatsToRecover) {
             try {
-                // Fetch messages newer than lastSeen timestamp
-                // fetchMessageHistory typically: (jid, count, cursor) => Promise<messages[]>
-                // We'll fetch up to 50 messages and filter by timestamp
-                const messages = await sock.fetchMessageHistory(jid, 50, {
-                    before: undefined, // Get latest
-                });
+                // Fetch messages newer than lastSeen timestamp.
+                // Baileys v7 may have changed this signature — fall back gracefully on any error.
+                let messages;
+                try {
+                    const result = await sock.fetchMessageHistory(jid, 50, { before: undefined });
+                    messages = Array.isArray(result) ? result : [];
+                }
+                catch {
+                    if (!loggedFetchWarning) {
+                        logger.warn?.(`[messageRecovery] sock.fetchMessageHistory failed — signature may have changed in this Baileys version. Recovery skipped for this reconnect.`);
+                        loggedFetchWarning = true;
+                    }
+                    continue;
+                }
                 if (!messages || !Array.isArray(messages))
                     continue;
                 // Filter to messages newer than lastSeen
