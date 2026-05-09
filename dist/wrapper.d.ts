@@ -28,6 +28,7 @@
  * Timelock guard will operate in detection-only mode (relies on 463 errors only).
  */
 import { AntiBan, type AntiBanConfig } from './antiban.js';
+import { type DeafSessionConfig } from './sessionStability.js';
 import type { WarmUpState } from './warmup.js';
 export type WASocket = {
     sendMessage: (jid: string, content: any, options?: any) => Promise<any>;
@@ -44,6 +45,12 @@ export type WASocket = {
 export interface WrapSocketOptions {
     /** Auto-respond to incoming messages when reply ratio suggests it (default: false) */
     autoRespondToIncoming?: boolean;
+    /**
+     * Deaf session detection — monitors for WS connections that stop delivering
+     * messages while keepAlive pings still succeed (Baileys issue #2491).
+     * Pass a config object to enable; omit to disable.
+     */
+    deafSession?: DeafSessionConfig;
 }
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
     antiban: AntiBan;

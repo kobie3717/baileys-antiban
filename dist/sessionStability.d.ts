@@ -76,6 +76,77 @@ export declare class SessionHealthMonitor {
      */
     reset(): void;
 }
+export interface DeafSessionConfig {
+    /**
+     * How long the session must be silent (no messages.upsert or messages.update)
+     * while the WS connection is open before it is declared "deaf".
+     * Default: 5 minutes.
+     */
+    timeoutMs?: number;
+    /**
+     * Minimum uptime before the detector starts checking.
+     * Avoids false positives immediately after a fresh connect.
+     * Default: 2 minutes.
+     */
+    minUptimeMs?: number;
+    /**
+     * Called when a deaf session is detected, before any auto-reconnect.
+     * Use this to log, alert, or run custom recovery logic.
+     */
+    onDeafSession?: (info: DeafSessionInfo) => void;
+    /**
+     * If true, call sock.end(new Error('deaf-session')) automatically.
+     * Set false if you want to handle reconnection yourself in onDeafSession.
+     * Default: true.
+     */
+    autoReconnect?: boolean;
+}
+export interface DeafSessionInfo {
+    /** Timestamp of last observed message activity, or null if none since connect. */
+    lastMessageAt: Date | null;
+    /** How long the session has been silent in ms. */
+    silenceDurationMs: number;
+    /** How long the WS has been open in ms. */
+    connectedSinceMs: number;
+}
+/**
+ * Detects "deaf sessions" — WebSocket connections that stay open but stop
+ * delivering messages.upsert / messages.update events.
+ *
+ * Root cause (Baileys issue #2491): messageMutex holding ACKs hostage under
+ * Redis latency spikes causes WhatsApp's server-side flow control to stop
+ * delivering messages to that client, while keepAlive pings still succeed.
+ *
+ * Usage: call onConnect() / onDisconnect() from connection.update events,
+ * onMessageActivity() from messages.upsert and messages.update events.
+ * Pass a sock reference via attach() so auto-reconnect can call sock.end().
+ */
+export declare class DeafSessionDetector {
+    private readonly timeoutMs;
+    private readonly minUptimeMs;
+    private readonly autoReconnect;
+    private readonly onDeafSessionCb?;
+    private lastMessageAt;
+    private connectedAt;
+    private timer;
+    private sockRef;
+    constructor(config?: DeafSessionConfig);
+    /** Attach a socket so auto-reconnect can call sock.end() */
+    attach(sock: {
+        end: (err?: Error) => void;
+    }): void;
+    /** Call when connection.update → connection === 'open' */
+    onConnect(): void;
+    /** Call when connection.update → connection === 'close' */
+    onDisconnect(): void;
+    /** Call on every messages.upsert and messages.update event */
+    onMessageActivity(): void;
+    /** Release the interval — call when discarding the socket */
+    destroy(): void;
+    private startTimer;
+    private stopTimer;
+    private check;
+}
 export interface SessionStabilityConfig {
     /** Enable canonical JID normalization before sendMessage (default: true) */
     canonicalJidNormalization?: boolean;

@@ -45,6 +45,9 @@ export {
   classifyDisconnect,
   type DisconnectClassification,
   type DisconnectCategory,
+  DeafSessionDetector,
+  type DeafSessionConfig,
+  type DeafSessionInfo,
 } from './sessionStability.js';
 
 // v2.1 new modules

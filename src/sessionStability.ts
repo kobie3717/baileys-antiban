@@ -273,6 +273,145 @@ export class SessionHealthMonitor {
   }
 }
 
+// ========== Deaf Session Detector ==========
+
+export interface DeafSessionConfig {
+  /**
+   * How long the session must be silent (no messages.upsert or messages.update)
+   * while the WS connection is open before it is declared "deaf".
+   * Default: 5 minutes.
+   */
+  timeoutMs?: number;
+  /**
+   * Minimum uptime before the detector starts checking.
+   * Avoids false positives immediately after a fresh connect.
+   * Default: 2 minutes.
+   */
+  minUptimeMs?: number;
+  /**
+   * Called when a deaf session is detected, before any auto-reconnect.
+   * Use this to log, alert, or run custom recovery logic.
+   */
+  onDeafSession?: (info: DeafSessionInfo) => void;
+  /**
+   * If true, call sock.end(new Error('deaf-session')) automatically.
+   * Set false if you want to handle reconnection yourself in onDeafSession.
+   * Default: true.
+   */
+  autoReconnect?: boolean;
+}
+
+export interface DeafSessionInfo {
+  /** Timestamp of last observed message activity, or null if none since connect. */
+  lastMessageAt: Date | null;
+  /** How long the session has been silent in ms. */
+  silenceDurationMs: number;
+  /** How long the WS has been open in ms. */
+  connectedSinceMs: number;
+}
+
+/**
+ * Detects "deaf sessions" — WebSocket connections that stay open but stop
+ * delivering messages.upsert / messages.update events.
+ *
+ * Root cause (Baileys issue #2491): messageMutex holding ACKs hostage under
+ * Redis latency spikes causes WhatsApp's server-side flow control to stop
+ * delivering messages to that client, while keepAlive pings still succeed.
+ *
+ * Usage: call onConnect() / onDisconnect() from connection.update events,
+ * onMessageActivity() from messages.upsert and messages.update events.
+ * Pass a sock reference via attach() so auto-reconnect can call sock.end().
+ */
+export class DeafSessionDetector {
+  private readonly timeoutMs: number;
+  private readonly minUptimeMs: number;
+  private readonly autoReconnect: boolean;
+  private readonly onDeafSessionCb?: (info: DeafSessionInfo) => void;
+
+  private lastMessageAt: number | null = null;
+  private connectedAt: number | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private sockRef: { end: (err?: Error) => void } | null = null;
+
+  constructor(config: DeafSessionConfig = {}) {
+    this.timeoutMs   = config.timeoutMs   ?? 5 * 60_000;
+    this.minUptimeMs = config.minUptimeMs ?? 2 * 60_000;
+    this.autoReconnect = config.autoReconnect ?? true;
+    this.onDeafSessionCb = config.onDeafSession;
+  }
+
+  /** Attach a socket so auto-reconnect can call sock.end() */
+  attach(sock: { end: (err?: Error) => void }): void {
+    this.sockRef = sock;
+  }
+
+  /** Call when connection.update → connection === 'open' */
+  onConnect(): void {
+    this.connectedAt  = Date.now();
+    this.lastMessageAt = Date.now(); // reset — fresh connect is not silence
+    this.startTimer();
+  }
+
+  /** Call when connection.update → connection === 'close' */
+  onDisconnect(): void {
+    this.connectedAt = null;
+    this.stopTimer();
+  }
+
+  /** Call on every messages.upsert and messages.update event */
+  onMessageActivity(): void {
+    this.lastMessageAt = Date.now();
+  }
+
+  /** Release the interval — call when discarding the socket */
+  destroy(): void {
+    this.stopTimer();
+    this.sockRef = null;
+  }
+
+  private startTimer(): void {
+    this.stopTimer();
+    this.timer = setInterval(() => this.check(), 30_000);
+  }
+
+  private stopTimer(): void {
+    if (this.timer !== null) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  private check(): void {
+    if (this.connectedAt === null) return;
+
+    const now = Date.now();
+    const connectedSinceMs = now - this.connectedAt;
+    if (connectedSinceMs < this.minUptimeMs) return;
+
+    const silenceDurationMs = now - (this.lastMessageAt ?? this.connectedAt);
+    if (silenceDurationMs < this.timeoutMs) return;
+
+    const info: DeafSessionInfo = {
+      lastMessageAt: this.lastMessageAt !== null ? new Date(this.lastMessageAt) : null,
+      silenceDurationMs,
+      connectedSinceMs,
+    };
+
+    this.onDeafSessionCb?.(info);
+
+    if (this.autoReconnect && this.sockRef) {
+      try {
+        this.sockRef.end(new Error('deaf-session'));
+      } catch {
+        // socket may already be closing
+      }
+    }
+
+    // Stop checking after triggering — let onConnect reset on next reconnect
+    this.stopTimer();
+  }
+}
+
 // ========== Socket Wrapper with Canonical JID Normalization ==========
 
 export interface SessionStabilityConfig {

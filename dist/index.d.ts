@@ -19,7 +19,7 @@ export { RetryReasonTracker, type RetryTrackerConfig, type RetryStats, type Retr
 export { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 export { LidResolver, type LidResolverConfig, type LidResolverStats, type LidMapping } from './lidResolver.js';
 export { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
-export { SessionHealthMonitor, type SessionHealthStats, type SessionHealthConfig, wrapWithSessionStability, type SessionStabilityConfig, classifyDisconnect, type DisconnectClassification, type DisconnectCategory, } from './sessionStability.js';
+export { SessionHealthMonitor, type SessionHealthStats, type SessionHealthConfig, wrapWithSessionStability, type SessionStabilityConfig, classifyDisconnect, type DisconnectClassification, type DisconnectCategory, DeafSessionDetector, type DeafSessionConfig, type DeafSessionInfo, } from './sessionStability.js';
 export { LidFirstResolver, createLidFirstResolver, type LidPhoneMapping, } from './lidFirstResolver.js';
 export { MessageRetryReason, MAC_ERROR_CODES, parseRetryReason, isMacError, getRetryReasonDescription, } from './retryReason.js';
 export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';

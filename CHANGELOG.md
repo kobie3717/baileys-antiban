@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.4] - 2026-05-09
+
+### Added
+- **`DeafSessionDetector`** — detects WebSocket sessions that stay open but stop delivering `messages.upsert` / `messages.update` events (Baileys issue #2491). Root cause: `messageMutex` holding ACKs under Redis latency spikes triggers WhatsApp server-side flow control, silently stopping message delivery while keepAlive pings still succeed. The detector runs a 30-second interval, fires `onDeafSession` callback with silence duration info, and optionally calls `sock.end(new Error('deaf-session'))` for auto-reconnect. Configurable `timeoutMs` (default 5 min), `minUptimeMs` warmup guard (default 2 min), `autoReconnect` flag.
+- **`wrapSocket` `deafSession` option** — pass `deafSession: DeafSessionConfig` to `wrapOptions` to enable automatic deaf-session detection on the wrapped socket. Activity signals are wired to all `messages.upsert` and `messages.update` events; cleanup is tied to `connection.update` close events.
+- New exports: `DeafSessionDetector`, `DeafSessionConfig`, `DeafSessionInfo`.
+
 ## [3.8.3] - 2026-05-09
 
 ### Fixed

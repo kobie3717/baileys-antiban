@@ -29,6 +29,7 @@
  */
 
 import { AntiBan, type AntiBanConfig } from './antiban.js';
+import { DeafSessionDetector, type DeafSessionConfig } from './sessionStability.js';
 import type { WarmUpState } from './warmup.js';
 
 export type WASocket = {
@@ -47,6 +48,12 @@ export type WASocket = {
 export interface WrapSocketOptions {
   /** Auto-respond to incoming messages when reply ratio suggests it (default: false) */
   autoRespondToIncoming?: boolean;
+  /**
+   * Deaf session detection — monitors for WS connections that stop delivering
+   * messages while keepAlive pings still succeed (Baileys issue #2491).
+   * Pass a config object to enable; omit to disable.
+   */
+  deafSession?: DeafSessionConfig;
 }
 
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
@@ -64,10 +71,16 @@ export function wrapSocket<T extends WASocket>(
   wrapOptions?: WrapSocketOptions
 ): WrappedSocket<T> {
   const antiban = new AntiBan(config, warmUpState);
-  const options: Required<WrapSocketOptions> = {
+  const options: WrapSocketOptions = {
     autoRespondToIncoming: false,
     ...wrapOptions,
   };
+
+  // Deaf session detector — optional, enabled via wrapOptions.deafSession
+  const deafDetector = options.deafSession
+    ? new DeafSessionDetector(options.deafSession)
+    : null;
+  if (deafDetector) deafDetector.attach(sock as unknown as { end: (err?: Error) => void });
 
   // Hook into Baileys events for health monitoring
   // Prefer ev.process() (Baileys ≥ late 2022) for batched event handling
@@ -81,9 +94,12 @@ export function wrapSocket<T extends WASocket>(
           const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
           antiban.onDisconnect(reason);
           antiban.destroy(); // Clean up all timers
+          deafDetector?.onDisconnect();
+          deafDetector?.destroy();
         }
         if (update.connection === 'open') {
           antiban.onReconnect();
+          deafDetector?.onConnect();
         }
         // Reachout timelock detection
         if (update.reachoutTimeLock) {
@@ -98,6 +114,7 @@ export function wrapSocket<T extends WASocket>(
       // Catch 463 errors from message updates + track retries + learn LID mappings
       if (events['messages.update']) {
         const updates = events['messages.update'];
+        deafDetector?.onMessageActivity();
         for (const update of updates) {
           // 463 error detection
           if (update?.update?.messageStubParameters) {
@@ -118,6 +135,7 @@ export function wrapSocket<T extends WASocket>(
       // Register known chats from incoming messages + handle reply suggestions + learn LID mappings
       if (events['messages.upsert']) {
         const { messages } = events['messages.upsert'];
+        deafDetector?.onMessageActivity();
 
         // Learn LID mappings FIRST (before any other processing)
         antiban.jidCanonicalizer?.onIncomingEvent(events['messages.upsert']);
@@ -166,9 +184,12 @@ export function wrapSocket<T extends WASocket>(
         const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
         antiban.onDisconnect(reason);
         antiban.destroy(); // Clean up all timers
+        deafDetector?.onDisconnect();
+        deafDetector?.destroy();
       }
       if (update.connection === 'open') {
         antiban.onReconnect();
+        deafDetector?.onConnect();
       }
       // Reachout timelock detection
       if (update.reachoutTimeLock) {
@@ -182,6 +203,7 @@ export function wrapSocket<T extends WASocket>(
 
     // Catch 463 errors from message updates + track retries + learn LID mappings
     sock.ev.on('messages.update', (updates: any[]) => {
+      deafDetector?.onMessageActivity();
       for (const update of updates) {
         // 463 error detection
         if (update?.update?.messageStubParameters) {
@@ -200,6 +222,7 @@ export function wrapSocket<T extends WASocket>(
     // Register known chats from incoming messages + handle reply suggestions + learn LID mappings
     sock.ev.on('messages.upsert', (upsert: any) => {
       const { messages } = upsert;
+      deafDetector?.onMessageActivity();
 
       // Learn LID mappings FIRST (before any other processing)
       antiban.jidCanonicalizer?.onIncomingEvent(upsert);

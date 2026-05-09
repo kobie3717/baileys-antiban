@@ -24,7 +24,7 @@ export { PostReconnectThrottle } from './reconnectThrottle.js';
 export { LidResolver } from './lidResolver.js';
 export { JidCanonicalizer } from './jidCanonicalizer.js';
 // v2.0 new modules
-export { SessionHealthMonitor, wrapWithSessionStability, classifyDisconnect, } from './sessionStability.js';
+export { SessionHealthMonitor, wrapWithSessionStability, classifyDisconnect, DeafSessionDetector, } from './sessionStability.js';
 // v2.1 new modules
 export { LidFirstResolver, createLidFirstResolver, } from './lidFirstResolver.js';
 export { MessageRetryReason, MAC_ERROR_CODES, parseRetryReason, isMacError, getRetryReasonDescription, } from './retryReason.js';

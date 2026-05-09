@@ -208,6 +208,95 @@ export class SessionHealthMonitor {
     }
 }
 /**
+ * Detects "deaf sessions" — WebSocket connections that stay open but stop
+ * delivering messages.upsert / messages.update events.
+ *
+ * Root cause (Baileys issue #2491): messageMutex holding ACKs hostage under
+ * Redis latency spikes causes WhatsApp's server-side flow control to stop
+ * delivering messages to that client, while keepAlive pings still succeed.
+ *
+ * Usage: call onConnect() / onDisconnect() from connection.update events,
+ * onMessageActivity() from messages.upsert and messages.update events.
+ * Pass a sock reference via attach() so auto-reconnect can call sock.end().
+ */
+export class DeafSessionDetector {
+    timeoutMs;
+    minUptimeMs;
+    autoReconnect;
+    onDeafSessionCb;
+    lastMessageAt = null;
+    connectedAt = null;
+    timer = null;
+    sockRef = null;
+    constructor(config = {}) {
+        this.timeoutMs = config.timeoutMs ?? 5 * 60_000;
+        this.minUptimeMs = config.minUptimeMs ?? 2 * 60_000;
+        this.autoReconnect = config.autoReconnect ?? true;
+        this.onDeafSessionCb = config.onDeafSession;
+    }
+    /** Attach a socket so auto-reconnect can call sock.end() */
+    attach(sock) {
+        this.sockRef = sock;
+    }
+    /** Call when connection.update → connection === 'open' */
+    onConnect() {
+        this.connectedAt = Date.now();
+        this.lastMessageAt = Date.now(); // reset — fresh connect is not silence
+        this.startTimer();
+    }
+    /** Call when connection.update → connection === 'close' */
+    onDisconnect() {
+        this.connectedAt = null;
+        this.stopTimer();
+    }
+    /** Call on every messages.upsert and messages.update event */
+    onMessageActivity() {
+        this.lastMessageAt = Date.now();
+    }
+    /** Release the interval — call when discarding the socket */
+    destroy() {
+        this.stopTimer();
+        this.sockRef = null;
+    }
+    startTimer() {
+        this.stopTimer();
+        this.timer = setInterval(() => this.check(), 30_000);
+    }
+    stopTimer() {
+        if (this.timer !== null) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+    check() {
+        if (this.connectedAt === null)
+            return;
+        const now = Date.now();
+        const connectedSinceMs = now - this.connectedAt;
+        if (connectedSinceMs < this.minUptimeMs)
+            return;
+        const silenceDurationMs = now - (this.lastMessageAt ?? this.connectedAt);
+        if (silenceDurationMs < this.timeoutMs)
+            return;
+        const info = {
+            lastMessageAt: this.lastMessageAt !== null ? new Date(this.lastMessageAt) : null,
+            silenceDurationMs,
+            connectedSinceMs,
+        };
+        this.onDeafSessionCb?.(info);
+        if (this.autoReconnect && this.sockRef) {
+            try {
+                this.sockRef.end(new Error('deaf-session'));
+            }
+            catch {
+                // socket may already be closing
+            }
+        }
+        // Stop checking after triggering — let onConnect reset on next reconnect
+        this.stopTimer();
+    }
+}
+/**
  * Wrap a Baileys socket with session stability features.
  * Returns a Proxy that intercepts sendMessage to canonicalize JIDs.
  */
