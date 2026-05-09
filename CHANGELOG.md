@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.5] - 2026-05-09
+
+### Added
+- **Observability module** (`src/observability.ts`) — Prometheus metrics export and pluggable structured logging.
+  - `exportPrometheusMetrics(stats, labels?)` — exports 27 metrics (3 counters, 24 gauges) in Prometheus text exposition format v0.0.4. Covers health score/risk, warmup progress, rate limiter windows, known chats, reply ratio, contact graph, retry spirals, reconnect throttle. Accepts custom labels (`instance`, `region`, etc.).
+  - `createMetricsHandler(getStats, labels?)` — returns Express/Fastify-compatible `handle(req, res)` + `text()` helpers for a `/metrics` endpoint.
+  - `createPeriodicExporter(getStats, config)` — push-based exporter that calls `onMetrics(text)` on a configurable interval (default 30s). Returns `stop()` handle.
+  - `createConsoleLogger(prefix?)` — structured console logger compatible with winston/pino interface (`debug`, `info`, `warn`, `error` with ISO timestamps and JSON meta).
+  - `AntiBanLogger` interface — plug in any logger: `winston`, `pino`, or the built-in console logger.
+- New exports: `createConsoleLogger`, `exportPrometheusMetrics`, `createMetricsHandler`, `createPeriodicExporter`, `AntiBanLogger`, `PeriodicExporterConfig`, `PeriodicExporterHandle`.
+
 ## [3.8.4] - 2026-05-09
 
 ### Added

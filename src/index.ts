@@ -139,3 +139,14 @@ export {
   type RampPresenceOptions,
   type PresenceCapableSocket,
 } from './stealthConnect.js';
+
+// Observability
+export {
+  createConsoleLogger,
+  exportPrometheusMetrics,
+  createMetricsHandler,
+  createPeriodicExporter,
+  type AntiBanLogger,
+  type PeriodicExporterConfig,
+  type PeriodicExporterHandle,
+} from './observability.js';

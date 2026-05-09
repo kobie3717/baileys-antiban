@@ -53,3 +53,5 @@ export { proxyRotator, } from './proxyRotator.js';
 export { generateSessionFingerprint, applySessionFingerprint, getMessageSendJitter, getTypingJitter, getRetryJitter, getVoiceNoteMetadata, getBatteryState, createStealthFingerprint, } from './sessionFingerprint.js';
 // v3.8 new modules
 export { getStealthSocketConfig, rampPresenceAfterConnect, STEALTH_BROWSER_POOL, AbortError, } from './stealthConnect.js';
+// Observability
+export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, } from './observability.js';
