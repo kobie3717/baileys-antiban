@@ -1,3 +1,4 @@
+"use strict";
 /**
  * Proxy Rotation — Native proxy injection for Baileys with health tracking
  *
@@ -16,6 +17,8 @@
  * @author Kobus Wentzel <kobie@pop.co.za>
  * @license MIT
  */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.proxyRotator = proxyRotator;
 // Create require function for loading optional peer dependencies
 // This function works in both ESM and CJS contexts
 function lazyRequire(moduleName) {
@@ -36,7 +39,7 @@ const NoopLogger = {
     warn: () => { },
     error: () => { },
 };
-export function proxyRotator(config) {
+function proxyRotator(config) {
     const { pool, strategy = 'round-robin', rotateOn = ['disconnect', 'ban-warning'], scheduledIntervalMs = 0, maxFailures = 3, deadCooldownMs = 600_000, // 10 minutes
     logger = NoopLogger, } = config;
     if (!pool || pool.length === 0) {

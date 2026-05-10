@@ -18,10 +18,23 @@
  */
 
 import type { Agent } from 'node:http';
-import { createRequire } from 'node:module';
 
-// Create require for optional peer dependency loading in ESM
-const require = createRequire(import.meta.url);
+// Create require function for loading optional peer dependencies
+// This function works in both ESM and CJS contexts
+function lazyRequire(moduleName: string): any {
+  // In CJS: use native require
+  if (typeof require !== 'undefined') {
+    return require(moduleName);
+  }
+
+  // In ESM: use createRequire with import.meta.url
+  // We use indirect eval to get import.meta.url to avoid parse errors in CJS
+  // @ts-ignore - ESM-only code path
+  const { createRequire } = (0, eval)('require')('node:module');
+  // @ts-ignore - ESM-only code path
+  const dynamicRequire = createRequire((0, eval)('import.meta.url'));
+  return dynamicRequire(moduleName);
+}
 
 export interface ProxyEndpoint {
   type: 'socks5' | 'socks5h' | 'http' | 'https';
@@ -160,7 +173,7 @@ export function proxyRotator(config: ProxyRotatorConfig): ProxyRotatorHandle {
       if (endpoint.type === 'socks5' || endpoint.type === 'socks5h') {
         if (!moduleCache['socks-proxy-agent']) {
           try {
-            moduleCache['socks-proxy-agent'] = require('socks-proxy-agent');
+            moduleCache['socks-proxy-agent'] = lazyRequire('socks-proxy-agent');
           } catch {
             logger.error?.(
               'socks-proxy-agent not installed. Run: npm install socks-proxy-agent'
@@ -172,7 +185,7 @@ export function proxyRotator(config: ProxyRotatorConfig): ProxyRotatorHandle {
       } else if (endpoint.type === 'http') {
         if (!moduleCache['http-proxy-agent']) {
           try {
-            moduleCache['http-proxy-agent'] = require('http-proxy-agent');
+            moduleCache['http-proxy-agent'] = lazyRequire('http-proxy-agent');
           } catch {
             logger.error?.(
               'http-proxy-agent not installed. Run: npm install http-proxy-agent'
@@ -184,7 +197,7 @@ export function proxyRotator(config: ProxyRotatorConfig): ProxyRotatorHandle {
       } else if (endpoint.type === 'https') {
         if (!moduleCache['https-proxy-agent']) {
           try {
-            moduleCache['https-proxy-agent'] = require('https-proxy-agent');
+            moduleCache['https-proxy-agent'] = lazyRequire('https-proxy-agent');
           } catch {
             logger.error?.(
               'https-proxy-agent not installed. Run: npm install https-proxy-agent'
