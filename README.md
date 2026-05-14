@@ -1045,6 +1045,34 @@ const antiban = new AntiBan({
 });
 ```
 
+### Using inside a plugin framework (OpenClaw, custom ESM loaders, etc.)
+
+`baileys-antiban` is a **pure ESM package**. `wrapSocket()` is the correct integration point — it works in any ESM or CJS context without patching Baileys directly.
+
+If your framework (e.g. OpenClaw's WhatsApp plugin) uses native ESM, **do not attempt `Module._load` interception** — it only intercepts CJS modules and silently does nothing for ESM imports.
+
+Correct approach — wrap the socket after it's created, regardless of how it was imported:
+
+```typescript
+import { makeWASocket } from 'baileys';        // or however your framework exposes it
+import { wrapSocket } from 'baileys-antiban';
+
+const rawSock = makeWASocket({ ... });
+const sock = wrapSocket(rawSock);              // drop-in — use sock everywhere
+```
+
+If your framework creates the socket internally and only exposes it via a callback or event, wrap it at that point:
+
+```typescript
+// OpenClaw / plugin pattern
+framework.on('socket', (rawSock) => {
+  const sock = wrapSocket(rawSock);
+  // use sock from here on
+});
+```
+
+> **Note:** If you install/update the Baileys package or plugin via a package manager, `wrapSocket()` survives the update untouched. Patching Baileys source directly (as a workaround) will be reset by any reinstall.
+
 ### State not persisting across restarts
 
 Use the FileStateAdapter:
