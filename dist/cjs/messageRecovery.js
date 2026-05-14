@@ -1,20 +1,4 @@
 "use strict";
-/**
- * Message Recovery — Solves Baileys' silent message loss on 408 reconnect
- *
- * After a 408 disconnect (and other clean reconnect paths), offline messages
- * arrive on the server side but never fire `messages.upsert` events in Baileys.
- * Bots silently lose messages from the disconnect window.
- *
- * This module:
- * 1. Tracks the last message ID seen per chat while connected
- * 2. Detects disconnect/reconnect cycles via connection.update events
- * 3. On reconnect, queries Baileys' message store for messages newer than lastSeen
- * 4. Re-emits gap messages through user callback (wired to messages.upsert handler)
- * 5. Fires onGapTooLarge if disconnect > maxGapMs instead of partial recovery
- *
- * @see https://github.com/WhiskeySockets/Baileys/issues/2491
- */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -50,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.messageRecovery = messageRecovery;
+const node_fs_1 = require("node:fs");
 const DEFAULT_CONFIG = {
     maxTrackedChats: 1000,
     maxGapMs: 30 * 60_000, // 30 minutes
@@ -73,9 +58,9 @@ function messageRecovery(sock, config) {
     // Persistence
     let persistTimer = null;
     let loggedFetchWarning = false;
-    // Load persisted state on startup (async — fires before first message in practice)
+    // Load persisted state on startup (synchronous — seeds lastSeen before first event)
     if (cfg.persistPath) {
-        void loadPersistence();
+        loadPersistence();
     }
     // Listen to messages.upsert to track lastSeen
     const messagesListener = sock.ev.process
@@ -277,14 +262,13 @@ function messageRecovery(sock, config) {
             logger.error?.(`[messageRecovery] Failed to persist state: ${err.message}`);
         }
     }
-    async function loadPersistence() {
+    function loadPersistence() {
         if (!cfg.persistPath)
             return;
         try {
-            const { existsSync, readFileSync } = await Promise.resolve().then(() => __importStar(require('node:fs')));
-            if (!existsSync(cfg.persistPath))
+            if (!(0, node_fs_1.existsSync)(cfg.persistPath))
                 return;
-            const raw = readFileSync(cfg.persistPath, 'utf-8');
+            const raw = (0, node_fs_1.readFileSync)(cfg.persistPath, 'utf-8');
             const data = JSON.parse(raw);
             for (const [jid, entry] of Object.entries(data)) {
                 lastSeen.set(jid, {

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+
 /**
  * Message Recovery — Solves Baileys' silent message loss on 408 reconnect
  *
@@ -94,9 +96,9 @@ export function messageRecovery(sock: any, config: MessageRecoveryConfig): Messa
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
   let loggedFetchWarning = false;
 
-  // Load persisted state on startup (async — fires before first message in practice)
+  // Load persisted state on startup (synchronous — seeds lastSeen before first event)
   if (cfg.persistPath) {
-    void loadPersistence();
+    loadPersistence();
   }
 
   // Listen to messages.upsert to track lastSeen
@@ -329,11 +331,10 @@ export function messageRecovery(sock: any, config: MessageRecoveryConfig): Messa
     }
   }
 
-  async function loadPersistence(): Promise<void> {
+  function loadPersistence(): void {
     if (!cfg.persistPath) return;
 
     try {
-      const { existsSync, readFileSync } = await import('node:fs');
       if (!existsSync(cfg.persistPath)) return;
 
       const raw = readFileSync(cfg.persistPath, 'utf-8');
