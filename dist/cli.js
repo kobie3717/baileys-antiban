@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import { StateManager } from './persist.js';
 import { resolveConfig } from './presets.js';
+import { applyPatch, unpatchFile } from './patch.js';
 const args = process.argv.slice(2);
 const command = args[0];
 function parseArgs(argv) {
@@ -92,6 +93,45 @@ function cmdWarmupSimulate(opts) {
     console.log('─'.repeat(50));
     console.log(`Day ${days + 1}+: graduated (unlimited by warmup)\n`);
 }
+function cmdPatch(opts) {
+    const searchPaths = opts['path'] ? [opts['path']] : undefined;
+    const preset = opts['preset'] || 'conservative';
+    const minDelay = opts['min-delay'] ? parseInt(opts['min-delay']) : 1500;
+    const maxDelay = opts['max-delay'] ? parseInt(opts['max-delay']) : 4000;
+    const typingIndicator = opts['no-typing'] ? false : true;
+    const dryRun = !!opts['dry-run'];
+    const force = !!opts['force'];
+    const result = applyPatch({
+        baileysPaths: searchPaths,
+        preset,
+        minDelay,
+        maxDelay,
+        typingIndicator,
+        dryRun,
+    });
+    if (result.alreadyPatched && !force) {
+        console.log(result.message);
+        process.exit(0);
+    }
+    if (!result.success) {
+        console.error('✗ ' + result.message);
+        process.exit(1);
+    }
+    console.log(result.message);
+}
+function cmdUnpatch(opts) {
+    const targetFile = opts['file'];
+    if (!targetFile) {
+        console.error('Usage: npx baileys-antiban unpatch --file <path-to-patched-file>');
+        process.exit(1);
+    }
+    const result = unpatchFile(targetFile);
+    if (!result.success) {
+        console.error('✗ ' + result.message);
+        process.exit(1);
+    }
+    console.log(result.message);
+}
 // Main
 const opts = parseArgs(args);
 switch (command) {
@@ -110,6 +150,12 @@ switch (command) {
             process.exit(1);
         }
         break;
+    case 'patch':
+        cmdPatch(opts);
+        break;
+    case 'unpatch':
+        cmdUnpatch(opts);
+        break;
     default:
         console.log('baileys-antiban v3.0');
         console.log('');
@@ -117,9 +163,15 @@ switch (command) {
         console.log('  status [--state <path>] [--json]     Show warmup and health status');
         console.log('  reset --state <path>                  Delete state file');
         console.log('  warmup --simulate <days> [--preset]  Show warmup schedule');
+        console.log('  patch [--path <baileys-dir>] [--preset] [--min-delay] [--max-delay] [--no-typing] [--dry-run]');
+        console.log('  unpatch --file <patched-file>         Restore file from backup');
         console.log('');
         console.log('Examples:');
         console.log('  npx baileys-antiban status --state ./antiban-state.json');
         console.log('  npx baileys-antiban warmup --simulate 7 --preset moderate');
         console.log('  npx baileys-antiban reset --state ./antiban-state.json');
+        console.log('  npx baileys-antiban patch');
+        console.log('  npx baileys-antiban patch --path ./node_modules/@openclaw/whatsapp/node_modules/baileys');
+        console.log('  npx baileys-antiban patch --preset moderate --min-delay 1000 --max-delay 3000');
+        console.log('  npx baileys-antiban unpatch --file ./node_modules/baileys/lib/socket/index.js');
 }

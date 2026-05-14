@@ -5,11 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.7] - 2026-05-14
+
+### Added
+- **`baileys-antiban patch` CLI command** — for frameworks that create the Baileys socket internally (OpenClaw `@openclaw/whatsapp`, custom ESM loaders) and don't expose a `socket:ready` hook. Automatically locates the Baileys install, detects CJS vs ESM output format, backs up the original file, and injects a `wrapSocket()` call around `makeWASocket`. Idempotent — safe to re-run after plugin updates. Pairs with a `postinstall` npm script for zero-maintenance re-patching.
+  - Auto-discovers Baileys in `node_modules/@openclaw/whatsapp/node_modules/baileys`, `node_modules/baileys`, `node_modules/@whiskeysockets/baileys`, and parent directories.
+  - `--path <dir>` — explicit Baileys directory override.
+  - `--preset conservative|moderate|aggressive` — antiban profile (default: `conservative`).
+  - `--min-delay` / `--max-delay` — override delay range in ms (default 1500–4000).
+  - `--no-typing` — disable typing indicators.
+  - `--dry-run` — preview without writing files.
+  - `--force` — re-patch even if already patched.
+  - Runtime config via env: `ANTIBAN_PRESET`, `ANTIBAN_MIN_DELAY`, `ANTIBAN_MAX_DELAY`, `ANTIBAN_TYPING`.
+- **`baileys-antiban unpatch` CLI command** — restores a patched file from its `.antiban-backup` or strips the patch block in-place if backup is missing.
+
 ## [3.8.6] - 2026-05-14
 
 ### Fixed
 - **CJS build for NestJS / CommonJS consumers.** Adds `dist/cjs/` output compiled with `module: CommonJS`, a `{"type":"commonjs"}` package marker injected at build time, and an `exports["require"]` condition so `require('baileys-antiban')` now resolves cleanly. Previously CommonJS callers hit `ERR_PACKAGE_PATH_NOT_EXPORTED` or `ERR_REQUIRE_ESM`.
-- **`messageRecovery` persistence load in ESM context.** `loadPersistence()` previously called `require('fs')` which is not defined in native ESM scope, throwing `ReferenceError` at runtime whenever `persistPath` was configured. Fixed by using `await import('node:fs')` to access synchronous `existsSync`/`readFileSync`, matching the pattern already used in `flushPersistence`. Call site changed to `void loadPersistence()` (fire-and-forget, resolves before first message in practice).
+- **`messageRecovery` persistence load in ESM context.** `loadPersistence()` previously called `require('fs')` which is not defined in native ESM scope, throwing `ReferenceError` at runtime whenever `persistPath` was configured. Fixed by using static `import { existsSync, readFileSync } from 'node:fs'` at module top level.
 - **`messageRecovery` doc comment.** Placeholder `issues/XXX` issue reference updated to `issues/2491` (deaf-session / silent message loss tracker).
 
 ### Changed

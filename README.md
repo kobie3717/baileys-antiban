@@ -1071,7 +1071,57 @@ framework.on('socket', (rawSock) => {
 });
 ```
 
-> **Note:** If you install/update the Baileys package or plugin via a package manager, `wrapSocket()` survives the update untouched. Patching Baileys source directly (as a workaround) will be reset by any reinstall.
+**If your framework creates the socket with no event or callback exposed** (common in tightly-integrated plugins), use the `patch` CLI command — see [CLI: patch command](#cli-patch-command) below.
+
+> **Note:** If you install/update the Baileys package or plugin via a package manager, `wrapSocket()` survives the update untouched. Patching Baileys source directly (as a workaround) will be reset by any reinstall — use the `patch` command to automate re-patching.
+
+---
+
+### CLI: patch command
+
+For plugin frameworks where `makeWASocket` is called internally and no socket hook is exposed (e.g. OpenClaw `@openclaw/whatsapp`), the `patch` command modifies the installed Baileys package to inject `wrapSocket()` automatically.
+
+```bash
+# Auto-detect Baileys location + apply patch
+npx baileys-antiban patch
+
+# OpenClaw: Baileys is nested inside the plugin
+npx baileys-antiban patch --path ./node_modules/@openclaw/whatsapp/node_modules/baileys
+
+# Custom profile
+npx baileys-antiban patch --preset moderate --min-delay 1000 --max-delay 3000
+
+# Preview without writing (dry run)
+npx baileys-antiban patch --dry-run
+
+# Restore original
+npx baileys-antiban unpatch --file ./node_modules/baileys/lib/socket/index.js
+```
+
+The patch is **idempotent** — re-running it on an already-patched file is a no-op. A `.antiban-backup` file is kept alongside the patched file for safe restoration.
+
+**Auto re-patch after plugin updates** — add a `postinstall` script to your project's `package.json`:
+
+```json
+{
+  "scripts": {
+    "postinstall": "npx baileys-antiban patch --path ./node_modules/@openclaw/whatsapp/node_modules/baileys"
+  }
+}
+```
+
+Now every `npm install` / `openclaw plugins install @openclaw/whatsapp` automatically re-applies the patch.
+
+**Runtime config via environment variables** (no re-patch needed to change settings):
+
+| Variable | Default | Description |
+|---|---|---|
+| `ANTIBAN_PRESET` | `conservative` | `conservative`, `moderate`, or `aggressive` |
+| `ANTIBAN_MIN_DELAY` | `1500` | Minimum delay between messages (ms) |
+| `ANTIBAN_MAX_DELAY` | `4000` | Maximum delay between messages (ms) |
+| `ANTIBAN_TYPING` | `true` | Enable typing indicators (`false` to disable) |
+
+---
 
 ### State not persisting across restarts
 
