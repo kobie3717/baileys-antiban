@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.6] - 2026-05-14
+
+### Fixed
+- **CJS build for NestJS / CommonJS consumers.** Adds `dist/cjs/` output compiled with `module: CommonJS`, a `{"type":"commonjs"}` package marker injected at build time, and an `exports["require"]` condition so `require('baileys-antiban')` now resolves cleanly. Previously CommonJS callers hit `ERR_PACKAGE_PATH_NOT_EXPORTED` or `ERR_REQUIRE_ESM`.
+- **`messageRecovery` persistence load in ESM context.** `loadPersistence()` previously called `require('fs')` which is not defined in native ESM scope, throwing `ReferenceError` at runtime whenever `persistPath` was configured. Fixed by using `await import('node:fs')` to access synchronous `existsSync`/`readFileSync`, matching the pattern already used in `flushPersistence`. Call site changed to `void loadPersistence()` (fire-and-forget, resolves before first message in practice).
+- **`messageRecovery` doc comment.** Placeholder `issues/XXX` issue reference updated to `issues/2491` (deaf-session / silent message loss tracker).
+
+### Changed
+- Removed unused `jest`, `@types/jest`, and `ts-jest` devDependencies (test runner uses `tsx` directly; `vitest` retained as future framework).
+- **Docs: ESM plugin-framework integration.** Added troubleshooting section to README covering `wrapSocket()` as the correct integration point for OpenClaw, custom ESM loaders, and other plugin frameworks that use native ESM. Documents why `Module._load` interception does not work with ESM and how to set up `ev.process` + `ev.on` fallback correctly.
+
 ## [3.8.5] - 2026-05-09
 
 ### Added

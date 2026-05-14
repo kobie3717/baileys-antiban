@@ -13,7 +13,7 @@
  * 4. Re-emits gap messages through user callback (wired to messages.upsert handler)
  * 5. Fires onGapTooLarge if disconnect > maxGapMs instead of partial recovery
  *
- * @see https://github.com/WhiskeySockets/Baileys/issues/XXX (47+ upvotes)
+ * @see https://github.com/WhiskeySockets/Baileys/issues/2491
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -73,9 +73,9 @@ function messageRecovery(sock, config) {
     // Persistence
     let persistTimer = null;
     let loggedFetchWarning = false;
-    // Load persisted state on startup
+    // Load persisted state on startup (async — fires before first message in practice)
     if (cfg.persistPath) {
-        loadPersistence();
+        void loadPersistence();
     }
     // Listen to messages.upsert to track lastSeen
     const messagesListener = sock.ev.process
@@ -277,14 +277,14 @@ function messageRecovery(sock, config) {
             logger.error?.(`[messageRecovery] Failed to persist state: ${err.message}`);
         }
     }
-    function loadPersistence() {
+    async function loadPersistence() {
         if (!cfg.persistPath)
             return;
         try {
-            const fs = require('fs');
-            if (!fs.existsSync(cfg.persistPath))
+            const { existsSync, readFileSync } = await Promise.resolve().then(() => __importStar(require('node:fs')));
+            if (!existsSync(cfg.persistPath))
                 return;
-            const raw = fs.readFileSync(cfg.persistPath, 'utf-8');
+            const raw = readFileSync(cfg.persistPath, 'utf-8');
             const data = JSON.parse(raw);
             for (const [jid, entry] of Object.entries(data)) {
                 lastSeen.set(jid, {

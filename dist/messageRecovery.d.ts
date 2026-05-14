@@ -12,7 +12,7 @@
  * 4. Re-emits gap messages through user callback (wired to messages.upsert handler)
  * 5. Fires onGapTooLarge if disconnect > maxGapMs instead of partial recovery
  *
- * @see https://github.com/WhiskeySockets/Baileys/issues/XXX (47+ upvotes)
+ * @see https://github.com/WhiskeySockets/Baileys/issues/2491
  */
 export interface MessageRecoveryConfig {
     /** Max messages to track in flight (in-memory cap on lastSeen tracking) */
