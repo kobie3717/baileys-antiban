@@ -51,6 +51,24 @@ exports.PRESETS = {
         groupProfiles: false,
         logging: true,
     },
+    // For established, fully-warmed accounts running enterprise-scale operations.
+    // Only use on accounts with 6+ months history and no prior bans.
+    'high-volume': {
+        maxPerMinute: 40,
+        maxPerHour: 1500,
+        maxPerDay: 8000,
+        minDelayMs: 400,
+        maxDelayMs: 1800,
+        newChatDelayMs: 1200,
+        warmupDays: 3,
+        day1Limit: 60,
+        growthFactor: 2.5,
+        inactivityThresholdHours: 24,
+        autoPauseAt: 'critical',
+        groupMultiplier: 0.95,
+        groupProfiles: false,
+        logging: true,
+    },
 };
 function resolveConfig(input) {
     if (input === undefined) {
@@ -58,14 +76,14 @@ function resolveConfig(input) {
     }
     if (typeof input === 'string') {
         if (!(input in exports.PRESETS)) {
-            throw new Error(`Unknown preset "${input}". Valid: ${Object.keys(exports.PRESETS).join(', ')}`);
+            throw new Error(`Unknown preset "${input}". Valid: conservative, moderate, aggressive, high-volume`);
         }
         return { ...exports.PRESETS[input] };
     }
     // Object form — extract preset base, merge overrides
     const { preset = 'conservative', ...overrides } = input;
     if (!(preset in exports.PRESETS)) {
-        throw new Error(`Unknown preset "${preset}". Valid: ${Object.keys(exports.PRESETS).join(', ')}`);
+        throw new Error(`Unknown preset "${preset}". Valid: conservative, moderate, aggressive, high-volume`);
     }
     return { ...exports.PRESETS[preset], ...overrides };
 }

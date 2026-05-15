@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.8] - 2026-05-15
+
+### Added
+- **`high-volume` preset** — for established, fully-warmed accounts running enterprise-scale operations. Limits: 40 msg/min, 1500/hr, 8000/day, 400–1800ms delays. Only use on accounts with 6+ months history and no prior bans. Set via `wrapSocket(sock, 'high-volume')` or env var `ANTIBAN_PRESET=high-volume`.
+- **Env-var integration pattern in docs** — full example showing how to drive every antiban parameter from environment variables inside a bot framework (avoids redeploying to tune limits). Based on real-world usage patterns from Zyra (kaikybrofc/zyra).
+
 ## [3.8.7] - 2026-05-14
 
 ### Added

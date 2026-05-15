@@ -1123,6 +1123,46 @@ Now every `npm install` / `openclaw plugins install @openclaw/whatsapp` automati
 
 ---
 
+### Full env-var configuration (framework integration pattern)
+
+When embedding `baileys-antiban` inside a framework or bot engine, drive every parameter from environment variables so you can tune without redeploying:
+
+```typescript
+import { wrapSocket } from 'baileys-antiban';
+import type { WrapOptions } from 'baileys-antiban';
+
+function readBoolean(key: string, fallback: boolean): boolean {
+  const v = process.env[key];
+  return v === undefined ? fallback : v !== 'false' && v !== '0';
+}
+function readNumber(key: string, fallback: number): number {
+  const v = process.env[key];
+  return v === undefined ? fallback : parseInt(v, 10);
+}
+
+const antibanOptions: WrapOptions = {
+  preset: (process.env.WA_ANTIBAN_PRESET as any) || 'conservative',
+  // rate limits
+  maxPerMinute:  readNumber('WA_ANTIBAN_MAX_PER_MINUTE',  undefined as any),
+  maxPerHour:    readNumber('WA_ANTIBAN_MAX_PER_HOUR',    undefined as any),
+  maxPerDay:     readNumber('WA_ANTIBAN_MAX_PER_DAY',     undefined as any),
+  minDelayMs:    readNumber('WA_ANTIBAN_MIN_DELAY_MS',    undefined as any),
+  maxDelayMs:    readNumber('WA_ANTIBAN_MAX_DELAY_MS',    undefined as any),
+  // warmup
+  warmupDays:    readNumber('WA_ANTIBAN_WARMUP_DAYS',     undefined as any),
+  // health
+  logging:       readBoolean('WA_ANTIBAN_LOGGING', true),
+  // deaf session
+  deafSession: readBoolean('WA_ANTIBAN_DEAF_SESSION_ENABLED', true)
+    ? { timeoutMs: readNumber('WA_ANTIBAN_DEAF_TIMEOUT_MS', 300_000) }
+    : undefined,
+};
+
+const sock = wrapSocket(makeWASocket({ ... }), antibanOptions);
+```
+
+Undefined values fall back to the preset defaults — so you only override what you need. Set `WA_ANTIBAN_PRESET=high-volume` for established enterprise accounts, `WA_ANTIBAN_PRESET=conservative` for new numbers.
+
 ### State not persisting across restarts
 
 Use the FileStateAdapter:

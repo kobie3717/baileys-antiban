@@ -16,7 +16,7 @@ export interface ResolvedConfig {
     persist?: string;
     logging: boolean;
 }
-export type PresetName = 'conservative' | 'moderate' | 'aggressive';
+export type PresetName = 'conservative' | 'moderate' | 'aggressive' | 'high-volume';
 export type AntiBanInput = PresetName | Partial<ResolvedConfig & {
     preset?: PresetName;
 }> | undefined;
