@@ -92,6 +92,11 @@ function mapLegacyToFlat(legacy: AntiBanConfigLegacy): Partial<ResolvedConfig> {
   if (flat.maxIdenticalMessages === undefined && typeof legacyAsFlat.maxIdenticalMessages === 'number') flat.maxIdenticalMessages = legacyAsFlat.maxIdenticalMessages as number;
   if (flat.identicalMessageWindowMs === undefined && typeof legacyAsFlat.identicalMessageWindowMs === 'number') flat.identicalMessageWindowMs = legacyAsFlat.identicalMessageWindowMs as number;
   if (flat.burstAllowance === undefined && typeof legacyAsFlat.burstAllowance === 'number') flat.burstAllowance = legacyAsFlat.burstAllowance as number;
+  // v3 fields that may coexist with legacy nested keys
+  if (flat.autoPauseAt === undefined && typeof legacyAsFlat.autoPauseAt === 'string') flat.autoPauseAt = legacyAsFlat.autoPauseAt as ResolvedConfig['autoPauseAt'];
+  if (flat.groupMultiplier === undefined && typeof legacyAsFlat.groupMultiplier === 'number') flat.groupMultiplier = legacyAsFlat.groupMultiplier as number;
+  if (flat.groupProfiles === undefined && typeof legacyAsFlat.groupProfiles === 'boolean') flat.groupProfiles = legacyAsFlat.groupProfiles as boolean;
+  if (flat.persist === undefined && typeof legacyAsFlat.persist === 'string') flat.persist = legacyAsFlat.persist as string;
 
   return flat;
 }

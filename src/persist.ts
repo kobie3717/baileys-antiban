@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import type { WarmUpState } from './warmup.js';
 
 export interface PersistedState {
@@ -23,14 +24,22 @@ export class StateManager {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(filePath: string) {
-    this.path = filePath;
+    // Resolve to absolute path and reject null bytes to prevent path injection
+    if (filePath.includes('\0')) throw new Error('[baileys-antiban] Invalid state file path: null byte');
+    this.path = path.resolve(filePath);
   }
 
   load(): PersistedState | null {
     try {
       const raw = fs.readFileSync(this.path, 'utf-8');
-      const parsed = JSON.parse(raw) as Partial<PersistedState>;
-      if (parsed.version !== 3) {
+      const parsed = JSON.parse(raw) as unknown;
+      // Strict shape validation before trusting file content
+      if (
+        typeof parsed !== 'object' || parsed === null ||
+        (parsed as Record<string, unknown>).version !== 3 ||
+        typeof (parsed as Record<string, unknown>).savedAt !== 'number' ||
+        !Array.isArray((parsed as Record<string, unknown>).knownChats)
+      ) {
         console.warn('[baileys-antiban] WARN: corrupt state file or version mismatch, starting fresh');
         return null;
       }
