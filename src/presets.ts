@@ -8,6 +8,9 @@ export interface ResolvedConfig {
   minDelayMs: number;
   maxDelayMs: number;
   newChatDelayMs: number;
+  maxIdenticalMessages: number;
+  identicalMessageWindowMs: number;
+  burstAllowance: number;
   // Warmup
   warmupDays: number;
   day1Limit: number;
@@ -39,6 +42,9 @@ export const PRESETS: Record<PresetName, ResolvedConfig> = {
     minDelayMs: 2500,
     maxDelayMs: 7000,
     newChatDelayMs: 4000,
+    maxIdenticalMessages: 3,
+    identicalMessageWindowMs: 3600000,
+    burstAllowance: 3,
     warmupDays: 10,
     day1Limit: 15,
     growthFactor: 1.8,
@@ -55,6 +61,9 @@ export const PRESETS: Record<PresetName, ResolvedConfig> = {
     minDelayMs: 1500,
     maxDelayMs: 5000,
     newChatDelayMs: 3000,
+    maxIdenticalMessages: 5,
+    identicalMessageWindowMs: 3600000,
+    burstAllowance: 5,
     warmupDays: 7,
     day1Limit: 20,
     growthFactor: 1.8,
@@ -71,6 +80,9 @@ export const PRESETS: Record<PresetName, ResolvedConfig> = {
     minDelayMs: 800,
     maxDelayMs: 3000,
     newChatDelayMs: 2000,
+    maxIdenticalMessages: 10,
+    identicalMessageWindowMs: 3600000,
+    burstAllowance: 8,
     warmupDays: 4,
     day1Limit: 35,
     growthFactor: 2.0,
@@ -89,6 +101,9 @@ export const PRESETS: Record<PresetName, ResolvedConfig> = {
     minDelayMs: 400,
     maxDelayMs: 1800,
     newChatDelayMs: 1200,
+    maxIdenticalMessages: 20,
+    identicalMessageWindowMs: 3600000,
+    burstAllowance: 15,
     warmupDays: 3,
     day1Limit: 60,
     growthFactor: 2.5,

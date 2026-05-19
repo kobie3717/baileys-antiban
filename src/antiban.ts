@@ -81,6 +81,18 @@ function mapLegacyToFlat(legacy: AntiBanConfigLegacy): Partial<ResolvedConfig> {
   if (legacy.warmUp?.day1Limit !== undefined) flat.day1Limit = legacy.warmUp.day1Limit;
   if (legacy.warmUp?.growthFactor !== undefined) flat.growthFactor = legacy.warmUp.growthFactor;
   if (legacy.logging !== undefined) flat.logging = legacy.logging;
+
+  // Preserve flat top-level fields that coexist with nested keys
+  const legacyAsFlat = legacy as Record<string, unknown>;
+  if (flat.warmupDays === undefined && typeof legacyAsFlat.warmUpDays === 'number') flat.warmupDays = legacyAsFlat.warmUpDays as number;
+  if (flat.warmupDays === undefined && typeof legacyAsFlat.warmupDays === 'number') flat.warmupDays = legacyAsFlat.warmupDays as number;
+  if (flat.day1Limit === undefined && typeof legacyAsFlat.day1Limit === 'number') flat.day1Limit = legacyAsFlat.day1Limit as number;
+  if (flat.growthFactor === undefined && typeof legacyAsFlat.growthFactor === 'number') flat.growthFactor = legacyAsFlat.growthFactor as number;
+  if (flat.inactivityThresholdHours === undefined && typeof legacyAsFlat.inactivityThresholdHours === 'number') flat.inactivityThresholdHours = legacyAsFlat.inactivityThresholdHours as number;
+  if (flat.maxIdenticalMessages === undefined && typeof legacyAsFlat.maxIdenticalMessages === 'number') flat.maxIdenticalMessages = legacyAsFlat.maxIdenticalMessages as number;
+  if (flat.identicalMessageWindowMs === undefined && typeof legacyAsFlat.identicalMessageWindowMs === 'number') flat.identicalMessageWindowMs = legacyAsFlat.identicalMessageWindowMs as number;
+  if (flat.burstAllowance === undefined && typeof legacyAsFlat.burstAllowance === 'number') flat.burstAllowance = legacyAsFlat.burstAllowance as number;
+
   return flat;
 }
 
@@ -170,6 +182,9 @@ export class AntiBan {
       minDelayMs: cfg.minDelayMs,
       maxDelayMs: cfg.maxDelayMs,
       newChatDelayMs: cfg.newChatDelayMs,
+      maxIdenticalMessages: cfg.maxIdenticalMessages,
+      identicalMessageWindowMs: cfg.identicalMessageWindowMs,
+      burstAllowance: cfg.burstAllowance,
       ...(legacyPassthrough?.rateLimiter || {}),
     });
 
@@ -496,6 +511,13 @@ export class AntiBan {
     this.contactGraphWarmer.onIncomingMessage(jid);
 
     return this.replyRatioGuard.suggestReply(jid, msgText);
+  }
+
+  /**
+   * Get the resolved configuration
+   */
+  getConfig(): ResolvedConfig {
+    return { ...this.resolvedConfig };
   }
 
   /**
