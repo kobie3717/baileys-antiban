@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.11] - 2026-05-19
+
+### Security
+- **persist.ts**: Resolve state file path to absolute (`path.resolve()`), reject null bytes. Add strict JSON shape validation (version, savedAt, knownChats types) before trusting loaded state — prevents type confusion from corrupt or tampered files.
+- **proxyRotator.ts**: Replace `(0, eval)('require')` and `(0, eval)('import.meta.url')` with `new Function()` on static literal strings in the ESM code path. Not user-controlled, but removes the indirect eval chain for static analysis and CSP compliance.
+
+### Fixed
+- **rateLimiter.ts**: Added LRU size cap (10,000 entries) to `identicalCount` Map. Time-window eviction alone allowed unbounded growth when sending many unique messages; oldest-by-lastSeen entries are now evicted when the cap is exceeded.
+- **antiban.ts**: Extend `mapLegacyToFlat()` to preserve `autoPauseAt`, `groupMultiplier`, `groupProfiles`, `persist` from flat top-level fields when legacy config detection fires — completing the coverage from 3.8.9.
+
+### Changed (3.8.10)
+- README: Expanded v3 flat config example with all `ResolvedConfig` fields; added correct `deafSession` wrapOptions (4th arg) example; marked nested Configuration section as deprecated.
+- Tests: 4 new v3 test cases covering `maxIdenticalMessages`/`burstAllowance` forwarding, mixed legacy+flat preservation, `getConfig()`.
+- CHANGELOG: Added missing 3.8.9 entry.
+
 ## [3.8.9] - 2026-05-19
 
 ### Fixed
