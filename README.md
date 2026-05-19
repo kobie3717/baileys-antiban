@@ -574,13 +574,37 @@ const ab = new AntiBan();
 // Or pick a preset
 const ab = new AntiBan('moderate');
 
-// Full control
+// Full control — all ResolvedConfig fields (import ResolvedConfig for type safety)
 const ab = new AntiBan({
-  preset: 'moderate',
+  preset: 'moderate',            // base preset: conservative|moderate|aggressive|high-volume
+  // Rate limits
+  maxPerMinute: 15,              // override any field from the preset
+  maxPerHour: 400,
+  maxPerDay: 2000,
+  minDelayMs: 1000,
+  maxDelayMs: 4000,
+  newChatDelayMs: 2500,
+  // Identical message protection
+  maxIdenticalMessages: 5,       // block after N identical msgs in window (default: 5)
+  identicalMessageWindowMs: 3600000, // tracking window in ms (default: 1h)
+  burstAllowance: 5,             // fast messages before throttle kicks in
+  // Warm-up
+  warmupDays: 7,
+  day1Limit: 20,
+  growthFactor: 1.8,
+  inactivityThresholdHours: 72,
+  // Health
+  autoPauseAt: 'high',          // pause at: low|medium|high|critical
+  // Groups
+  groupProfiles: true,
+  groupMultiplier: 0.7,
+  // Persistence
   persist: './antiban-state.json',  // survives restarts
-  groupProfiles: true,               // stricter limits for groups
-  maxPerMinute: 15,                  // override any value
+  logging: true,
 });
+
+// Debug: see the effective config after preset merging
+console.log(ab.getConfig());
 
 // Usage unchanged
 const result = await ab.beforeSend(jid, text);
@@ -637,7 +661,30 @@ try {
 }
 ```
 
-## Quick Start (Legacy)
+### `wrapSocket` with optional features
+
+`deafSession` (deaf-session detector) and `autoRespondToIncoming` are **wrapOptions** — the 4th argument to `wrapSocket`, separate from the antiban config:
+
+```typescript
+import { wrapSocket } from 'baileys-antiban';
+
+const safeSock = wrapSocket(
+  sock,
+  { maxPerMinute: 15, autoPauseAt: 'high' },  // 2nd: AntiBanConfig (flat)
+  undefined,                                    // 3rd: warmUpState (or pass saved state)
+  {                                             // 4th: WrapSocketOptions
+    deafSession: {
+      timeoutMs: 300000,       // declare deaf after 5min without incoming msgs
+      minUptimeMs: 120000,     // must be up 2min before deaf detection starts
+      autoReconnect: true,
+      onDeafSession: () => { /* reconnect logic */ },
+    },
+    autoRespondToIncoming: false,
+  }
+);
+```
+
+## Quick Start (Legacy — v2 API, still works)
 
 ### Option 1: Wrap Your Socket (Easiest)
 
@@ -696,9 +743,9 @@ sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
 });
 ```
 
-## Configuration
+## Configuration (Legacy nested format — deprecated)
 
-All options are optional — defaults are conservative and safe.
+> **Use the flat config in Quick Start (v3) above instead.** The nested format below still works but triggers a deprecation warning. Callbacks (`onRiskChange`, `onTimelockDetected`, `onTimelockLifted`) and advanced options for `jidCanonicalizer`/`lidResolver` currently still require the nested format — flat equivalents planned for v3.9.
 
 ```typescript
 import { AntiBan } from 'baileys-antiban';

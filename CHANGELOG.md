@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.9] - 2026-05-19
+
+### Fixed
+- **`maxIdenticalMessages`, `identicalMessageWindowMs`, `burstAllowance` silently ignored.** These fields were missing from `ResolvedConfig` so passing them in flat config had no effect — the `RateLimiter` used its hardcoded defaults (3/3/3600000). All three are now in `ResolvedConfig`, set via preset defaults, and forwarded to `RateLimiter`. Reported in #8.
+- **Flat top-level fields dropped when legacy config is detected.** If a config object contained any nested key (`health`, `timelock`, `jidCanonicalizer`, `lidResolver`, etc.), `isLegacyConfig()` returned true and `mapLegacyToFlat()` only extracted fields from nested sub-objects — silently dropping flat top-level fields like `warmUpDays`, `day1Limit`, `growthFactor`, `inactivityThresholdHours`, `maxIdenticalMessages`, `burstAllowance`. Mixed configs (flat rate/warmup fields + nested callback objects) now preserve the flat fields correctly. Reported in #8.
+
+### Added
+- **`AntiBan.getConfig()`** — returns a copy of the effective resolved config after preset merging and defaults. Useful for debugging which values are actually in use.
+- **Preset defaults for new fields** — `maxIdenticalMessages`: 3/5/10/20, `identicalMessageWindowMs`: 3600000 (all presets), `burstAllowance`: 3/5/8/15 for conservative/moderate/aggressive/high-volume.
+
 ## [3.8.8] - 2026-05-15
 
 ### Added
