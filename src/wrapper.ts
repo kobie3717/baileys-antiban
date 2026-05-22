@@ -314,7 +314,22 @@ export function wrapSocket<T extends WASocket>(
         }
         return result;
       } catch (error) {
-        antiban.afterSendFailed(error instanceof Error ? error.message : String(error));
+        // Baileys PR #2587: partial-encrypt Boom now carries structured data:
+        //   error.data.failed[]   — per-recipient { jid, error } failures
+        //   error.data.firstCause — most likely root cause string
+        // Extract for richer health-monitor diagnostics vs plain error.message.
+        const boomData = (error as any)?.data as
+          | { failed?: Array<{ jid: string; error: string }>; firstCause?: string }
+          | undefined;
+        if (boomData?.failed?.length) {
+          const cause = boomData.firstCause ?? 'unknown';
+          const failedJids = boomData.failed.map((f) => f.jid).join(', ');
+          antiban.afterSendFailed(
+            `encrypt-all-failed firstCause=${cause} jids=[${failedJids}]`
+          );
+        } else {
+          antiban.afterSendFailed(error instanceof Error ? error.message : String(error));
+        }
         throw error;
       }
     });
