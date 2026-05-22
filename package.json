@@ -29,7 +29,7 @@
     "prepublishOnly": "npm run build"
   },
   "bin": {
-    "baileys-antiban": "./dist/cli.js"
+    "baileys-antiban": "dist/cli.js"
   },
   "keywords": [
     "baileys",
@@ -61,7 +61,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kobie3717/baileys-antiban"
+    "url": "git+https://github.com/kobie3717/baileys-antiban.git"
   },
   "bugs": {
     "url": "https://github.com/kobie3717/baileys-antiban/issues"
