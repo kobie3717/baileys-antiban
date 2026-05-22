@@ -1,4 +1,5 @@
-import type { BanRiskLevel } from './health.js';
+import type { BanRiskLevel, HealthStatus } from './health.js';
+import type { TimelockState } from './timelockGuard.js';
 
 export interface ResolvedConfig {
   // Rate limits
@@ -25,6 +26,11 @@ export interface ResolvedConfig {
   persist?: string;
   // Logging
   logging: boolean;
+  // Callbacks (flat — no nested config required)
+  onAtRisk?: (status: HealthStatus) => void;
+  onRiskChange?: (status: HealthStatus) => void;         // ADD: fires on ALL risk level changes
+  onTimelockDetected?: (state: TimelockState) => void;   // ADD: fires when timelock detected
+  onTimelockLifted?: (state: TimelockState) => void;     // ADD: fires when timelock lifts
 }
 
 export type PresetName = 'conservative' | 'moderate' | 'aggressive' | 'high-volume';

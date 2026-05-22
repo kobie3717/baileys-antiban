@@ -216,7 +216,10 @@ export class AntiBan {
           console.log(`[baileys-antiban] ${status.recommendation}`);
           status.reasons.forEach(r => console.log(`[baileys-antiban]   → ${r}`));
         }
-        // Call original callback if present
+        if ((status.risk === 'high' || status.risk === 'critical') && cfg.onAtRisk) {
+          cfg.onAtRisk(status);
+        }
+        cfg.onRiskChange?.(status);
         legacyPassthrough?.health?.onRiskChange?.(status);
       },
     });
@@ -227,12 +230,14 @@ export class AntiBan {
         if (this.logging) {
           console.log(`[baileys-antiban] REACHOUT TIMELOCKED — ${state.enforcementType || 'unknown'}, expires ${state.expiresAt?.toISOString() || 'unknown'}`);
         }
+        cfg.onTimelockDetected?.(state);
         legacyPassthrough?.timelock?.onTimelockDetected?.(state);
       },
       onTimelockLifted: (state) => {
         if (this.logging) {
           console.log(`[baileys-antiban] Timelock lifted — resuming new contact messages`);
         }
+        cfg.onTimelockLifted?.(state);
         legacyPassthrough?.timelock?.onTimelockLifted?.(state);
       },
     });
