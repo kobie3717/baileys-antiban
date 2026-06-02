@@ -8,9 +8,9 @@
 
 **Drop-in anti-ban middleware for Baileys WhatsApp bots. Free, self-hosted, TypeScript-first. Whapi.Cloud alternative — zero monthly fees.**
 
-> Rate limiting with Gaussian jitter, 7-day warmup, session health monitoring, LID resolver, disconnect classification, contact graph enforcement — all in one `npm install`. Works with [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
+> Rate limiting with Gaussian jitter, 7-day warmup, session health monitoring, LID resolver, disconnect classification, contact graph enforcement, device fingerprinting, group operation guards, recovery orchestration, cross-instance coordination — all in one `npm install`. Works with [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
 
-> **New in v3.3:** [LID Migration Guide](./docs/lid-migration.md) — survive Baileys v7's @lid default with stable thread keys.
+> **New in v4.6:** Cross-instance coordination, adaptive rate limiting, delivery tracking, per-contact risk delays, BanRecoveryOrchestrator, GroupOperationGuard, LegitimacySignalInjector — all auto-wired.
 
 ## Why Trust This Package
 
@@ -26,6 +26,125 @@ The npm WhatsApp ecosystem has a malware problem. In April 2026, [`lotusbail`](h
 - **Used in production** — powers [WhatsAuction](https://whatsauction.co.za) live. The author dogfoods this on his own customers' bots.
 
 If you can't read the code yourself, lean on these signals: signed releases, public audit trail, no telemetry, and a real product behind it. That's the floor. Everything below is the feature set.
+
+## v4.x New Features — Production-Grade Ban Prevention
+
+v4.0–v4.6 ship six major anti-ban modules. All are **auto-wired** by default via `wrapSocket()` or `wrapSocketWithFingerprint()`.
+
+### v4.0 — GroupOperationGuard
+
+Rate-limits group operations to prevent `account_reachout_restricted` errors. WA limits: ~3 adds/10min, 2 creates/10min.
+
+```typescript
+import { wrapSocket } from 'baileys-antiban';
+
+const sock = wrapSocket(makeWASocket({ ... }), {
+  groupOpGuard: { limits: { add: { max: 3, windowMs: 600_000 } } },
+});
+```
+
+Classify errors: `classifyGroupOpError(err)` returns `GROUP_OP_ERRORS.REACHOUT_RESTRICTED` | `RATE_OVERLIMIT` | `PRIVACY_BLOCK` | etc.  
+Disable: `groupOpGuard: false`
+
+### v4.1 — LegitimacySignalInjector
+
+Injects realistic imperfections: typos + corrections (2.5% of messages), read gaps, mid-typing pauses. WhatsApp's ML flags accounts that are "too perfect".
+
+```typescript
+const sock = wrapSocket(makeWASocket({ ... }), {
+  legitimacySignals: { typoProbability: 0.03 },
+});
+```
+
+Disable: `legitimacySignals: false`
+
+### v4.2 — BanRecoveryOrchestrator
+
+Structured recovery after ban events. Auto-triggers via HealthMonitor at critical risk.
+
+```typescript
+import { BanRecoveryOrchestrator } from 'baileys-antiban';
+
+const recovery = new BanRecoveryOrchestrator({
+  onPhaseChange: (phase, plan) => console.log(`Phase: ${phase}`),
+  onHardBan: () => { /* replace SIM */ },
+});
+
+recovery.triggerRecovery('timelock');
+const status = recovery.getStatus();
+console.log(status.rateMultiplier); // 0.1 = 10% speed
+```
+
+**Recovery plans:** timelock: 24h pause, 10% resume, 15%/week ramp | rate_overlimit: 4h, 25%, 25%/week | soft_ban: 48h, 5%, 10%/week | hard_ban: dead  
+Access via: `antiban.recoveryOrchestrator`
+
+### v4.3 — wrapSocketWithFingerprint
+
+One-call setup with device fingerprint randomization (appVersion, osVersion, deviceModel).
+
+```typescript
+import { wrapSocketWithFingerprint } from 'baileys-antiban';
+
+const sock = wrapSocketWithFingerprint(makeWASocket, { auth }, { preset: 'moderate' });
+```
+
+**Preset changes:** All presets default `groupProfiles: true`; `aggressive`/`high-volume` now `autoPauseAt: 'high'`
+
+### v4.4 — Per-Contact Risk Delays + DeliveryTracker
+
+Strangers get 2.5× delay, known contacts 1.0×. Active when `contactGraph.enabled: true`.
+
+```typescript
+const sock = wrapSocket(makeWASocket({ ... }), { contactGraph: { enabled: true } });
+// stranger: 2.5×, handshake_sent: 1.8×, handshake_complete: 1.3×, known: 1.0×
+```
+
+**DeliveryTracker** tracks double-tick receipts. <60% delivery = soft-ban signal.
+
+```typescript
+import { DeliveryTracker } from 'baileys-antiban';
+
+const tracker = new DeliveryTracker({
+  lowRateThreshold: 0.6,
+  onLowDeliveryRate: (rate) => console.error(`Delivery: ${rate * 100}%`),
+});
+
+sock.ev.on('messages.upsert', ({ messages }) => {
+  messages.forEach(m => m.key.fromMe && tracker.onMessageSent(m.key.id));
+});
+sock.ev.on('messages.update', (updates) => {
+  updates.forEach(({ key, update }) => {
+    if (update.status >= 3) tracker.onDeliveryReceipt(key.id);
+  });
+});
+```
+
+### v4.5 — Adaptive Rate Limiting
+
+Auto-adjusts rate based on delivery success: ≥85% → 100% speed, <55% → 25% speed. Auto-wired.
+
+```typescript
+import { RateLimiter } from 'baileys-antiban';
+
+const limiter = new RateLimiter({ maxPerMinute: 10 });
+limiter.adaptLimits(0.5); // manual throttle to 50%
+const factor = limiter.getCurrentFactor();
+```
+
+### v4.6 — Cross-Instance Coordination
+
+Shared token bucket across processes. Solves: 5 bots × 8/min = 40/min → flag.
+
+```typescript
+const sock = wrapSocket(makeWASocket({ ... }), {
+  instanceCoordinator: '/tmp/wa-pool.json',
+  instancePoolMaxPerMinute: 20,
+});
+```
+
+All instances share 20/min IP-level budget. Atomic writes via rename-swap.
+
+---
 
 ## v2.0 New Features — Session Stability Module
 
