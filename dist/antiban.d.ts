@@ -25,7 +25,7 @@ import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThro
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 import { SessionHealthMonitor, type SessionHealthStats } from './sessionStability.js';
-import { type AntiBanInput } from './presets.js';
+import { type AntiBanInput, type ResolvedConfig } from './presets.js';
 export interface AntiBanConfigLegacy {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
@@ -119,6 +119,10 @@ export declare class AntiBan {
         shouldReply: boolean;
         suggestedText?: string;
     };
+    /**
+     * Get the resolved configuration
+     */
+    getConfig(): ResolvedConfig;
     /**
      * Get comprehensive stats
      */

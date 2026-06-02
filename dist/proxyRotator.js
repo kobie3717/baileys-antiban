@@ -16,20 +16,19 @@
  * @author Kobus Wentzel <kobie@pop.co.za>
  * @license MIT
  */
-// Create require function for loading optional peer dependencies
-// This function works in both ESM and CJS contexts
+// Load optional peer dependencies synchronously in both ESM and CJS builds.
+// CJS: native require is available. ESM: new Function() reads import.meta.url
+// without causing TypeScript parse errors in CJS compilation. The string passed
+// to new Function is a static literal — not user-controlled.
 function lazyRequire(moduleName) {
-    // In CJS: use native require
     if (typeof require !== 'undefined') {
         return require(moduleName);
     }
-    // In ESM: use createRequire with import.meta.url
-    // We use indirect eval to get import.meta.url to avoid parse errors in CJS
-    // @ts-ignore - ESM-only code path
-    const { createRequire } = (0, eval)('require')('node:module');
-    // @ts-ignore - ESM-only code path
-    const dynamicRequire = createRequire((0, eval)('import.meta.url'));
-    return dynamicRequire(moduleName);
+    // ESM path: new Function with static literal string avoids TS CJS-parse error on import.meta.
+    // Not user-controlled — both strings are compile-time constants.
+    const { createRequire } = (new Function('return require')())('node:module');
+    const metaUrl = new Function('return import.meta.url')();
+    return createRequire(metaUrl)(moduleName);
 }
 const NoopLogger = {
     info: () => { },

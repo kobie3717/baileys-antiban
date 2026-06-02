@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 const KNOWN_CHATS_MAX = 1000;
 const DEBOUNCE_MS = 5000;
 /**
@@ -12,13 +13,20 @@ export class StateManager {
     path;
     debounceTimer = null;
     constructor(filePath) {
-        this.path = filePath;
+        // Resolve to absolute path and reject null bytes to prevent path injection
+        if (filePath.includes('\0'))
+            throw new Error('[baileys-antiban] Invalid state file path: null byte');
+        this.path = path.resolve(filePath);
     }
     load() {
         try {
             const raw = fs.readFileSync(this.path, 'utf-8');
             const parsed = JSON.parse(raw);
-            if (parsed.version !== 3) {
+            // Strict shape validation before trusting file content
+            if (typeof parsed !== 'object' || parsed === null ||
+                parsed.version !== 3 ||
+                typeof parsed.savedAt !== 'number' ||
+                !Array.isArray(parsed.knownChats)) {
                 console.warn('[baileys-antiban] WARN: corrupt state file or version mismatch, starting fresh');
                 return null;
             }

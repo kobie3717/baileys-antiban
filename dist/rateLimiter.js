@@ -174,6 +174,15 @@ export class RateLimiter {
                 this.identicalCount.delete(hash);
             }
         }
+        // LRU size cap — prevents unbounded growth when sending many unique messages.
+        // Evict oldest-by-lastSeen entries when map exceeds 10,000 entries.
+        const IDENTICAL_COUNT_MAX = 10_000;
+        if (this.identicalCount.size > IDENTICAL_COUNT_MAX) {
+            const sorted = [...this.identicalCount.entries()].sort(([, a], [, b]) => a.lastSeen - b.lastSeen);
+            const excess = this.identicalCount.size - IDENTICAL_COUNT_MAX;
+            for (let i = 0; i < excess; i++)
+                this.identicalCount.delete(sorted[i][0]);
+        }
     }
     /** Random delay between min and max (gaussian-ish distribution) */
     jitter(min, max) {

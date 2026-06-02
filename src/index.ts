@@ -140,6 +140,21 @@ export {
   type PresenceCapableSocket,
 } from './stealthConnect.js';
 
+// v4.0 new modules
+export {
+  GroupOperationGuard,
+  classifyGroupOpError,
+  extractPrivacyBlock,
+  GROUP_OP_ERRORS,
+  type GroupOperation,
+  type GroupOpLimit,
+  type GroupOperationGuardConfig,
+  type GroupOpResult,
+  type GroupOperationGuardStats,
+  type GroupOpErrorCode,
+  type PrivacyBlockResult,
+} from './groupOperationGuard.js';
+
 // Observability
 export {
   createConsoleLogger,

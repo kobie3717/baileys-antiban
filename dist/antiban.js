@@ -61,6 +61,33 @@ function mapLegacyToFlat(legacy) {
         flat.growthFactor = legacy.warmUp.growthFactor;
     if (legacy.logging !== undefined)
         flat.logging = legacy.logging;
+    // Preserve flat top-level fields that coexist with nested keys
+    const legacyAsFlat = legacy;
+    if (flat.warmupDays === undefined && typeof legacyAsFlat.warmUpDays === 'number')
+        flat.warmupDays = legacyAsFlat.warmUpDays;
+    if (flat.warmupDays === undefined && typeof legacyAsFlat.warmupDays === 'number')
+        flat.warmupDays = legacyAsFlat.warmupDays;
+    if (flat.day1Limit === undefined && typeof legacyAsFlat.day1Limit === 'number')
+        flat.day1Limit = legacyAsFlat.day1Limit;
+    if (flat.growthFactor === undefined && typeof legacyAsFlat.growthFactor === 'number')
+        flat.growthFactor = legacyAsFlat.growthFactor;
+    if (flat.inactivityThresholdHours === undefined && typeof legacyAsFlat.inactivityThresholdHours === 'number')
+        flat.inactivityThresholdHours = legacyAsFlat.inactivityThresholdHours;
+    if (flat.maxIdenticalMessages === undefined && typeof legacyAsFlat.maxIdenticalMessages === 'number')
+        flat.maxIdenticalMessages = legacyAsFlat.maxIdenticalMessages;
+    if (flat.identicalMessageWindowMs === undefined && typeof legacyAsFlat.identicalMessageWindowMs === 'number')
+        flat.identicalMessageWindowMs = legacyAsFlat.identicalMessageWindowMs;
+    if (flat.burstAllowance === undefined && typeof legacyAsFlat.burstAllowance === 'number')
+        flat.burstAllowance = legacyAsFlat.burstAllowance;
+    // v3 fields that may coexist with legacy nested keys
+    if (flat.autoPauseAt === undefined && typeof legacyAsFlat.autoPauseAt === 'string')
+        flat.autoPauseAt = legacyAsFlat.autoPauseAt;
+    if (flat.groupMultiplier === undefined && typeof legacyAsFlat.groupMultiplier === 'number')
+        flat.groupMultiplier = legacyAsFlat.groupMultiplier;
+    if (flat.groupProfiles === undefined && typeof legacyAsFlat.groupProfiles === 'boolean')
+        flat.groupProfiles = legacyAsFlat.groupProfiles;
+    if (flat.persist === undefined && typeof legacyAsFlat.persist === 'string')
+        flat.persist = legacyAsFlat.persist;
     return flat;
 }
 export class AntiBan {
@@ -117,6 +144,9 @@ export class AntiBan {
             minDelayMs: cfg.minDelayMs,
             maxDelayMs: cfg.maxDelayMs,
             newChatDelayMs: cfg.newChatDelayMs,
+            maxIdenticalMessages: cfg.maxIdenticalMessages,
+            identicalMessageWindowMs: cfg.identicalMessageWindowMs,
+            burstAllowance: cfg.burstAllowance,
             ...(legacyPassthrough?.rateLimiter || {}),
         });
         // Restore knownChats from persisted state after rateLimiter is constructed
@@ -140,7 +170,10 @@ export class AntiBan {
                     console.log(`[baileys-antiban] ${status.recommendation}`);
                     status.reasons.forEach(r => console.log(`[baileys-antiban]   → ${r}`));
                 }
-                // Call original callback if present
+                if ((status.risk === 'high' || status.risk === 'critical') && cfg.onAtRisk) {
+                    cfg.onAtRisk(status);
+                }
+                cfg.onRiskChange?.(status);
                 legacyPassthrough?.health?.onRiskChange?.(status);
             },
         });
@@ -151,12 +184,14 @@ export class AntiBan {
                 if (this.logging) {
                     console.log(`[baileys-antiban] REACHOUT TIMELOCKED — ${state.enforcementType || 'unknown'}, expires ${state.expiresAt?.toISOString() || 'unknown'}`);
                 }
+                cfg.onTimelockDetected?.(state);
                 legacyPassthrough?.timelock?.onTimelockDetected?.(state);
             },
             onTimelockLifted: (state) => {
                 if (this.logging) {
                     console.log(`[baileys-antiban] Timelock lifted — resuming new contact messages`);
                 }
+                cfg.onTimelockLifted?.(state);
                 legacyPassthrough?.timelock?.onTimelockLifted?.(state);
             },
         });
@@ -415,6 +450,12 @@ export class AntiBan {
         this.replyRatioGuard.recordReceived(jid);
         this.contactGraphWarmer.onIncomingMessage(jid);
         return this.replyRatioGuard.suggestReply(jid, msgText);
+    }
+    /**
+     * Get the resolved configuration
+     */
+    getConfig() {
+        return { ...this.resolvedConfig };
     }
     /**
      * Get comprehensive stats
