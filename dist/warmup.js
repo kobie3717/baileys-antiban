@@ -9,10 +9,14 @@
  * - Numbers going from 0 to 100 messages/day overnight
  * - Sudden pattern changes after period of inactivity
  */
+/** Generate a random growth factor in [1.5, 2.2] to avoid cross-account clustering */
+function randomGrowthFactor() {
+    return Math.round((1.5 + Math.random() * 0.7) * 100) / 100;
+}
 const DEFAULT_CONFIG = {
     warmUpDays: 7,
     day1Limit: 20,
-    growthFactor: 1.8,
+    growthFactor: randomGrowthFactor(), // intentionally non-deterministic
     inactivityThresholdHours: 72,
 };
 export class WarmUp {

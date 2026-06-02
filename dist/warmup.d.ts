@@ -14,8 +14,13 @@ export interface WarmUpConfig {
     warmUpDays: number;
     /** Messages allowed on day 1 (default: 20) */
     day1Limit: number;
-    /** Growth factor per day (default: 1.8 — roughly doubles daily) */
-    growthFactor: number;
+    /**
+     * Growth factor per day (default: randomized 1.5–2.2 per instance).
+     * A fixed value creates a cross-account fingerprint — all bots using this
+     * library would follow the identical daily growth curve, trivially clusterable.
+     * Leave unset to get a random value in the safe range each time.
+     */
+    growthFactor?: number;
     /** Hours of inactivity before re-entering warm-up (default: 72) */
     inactivityThresholdHours: number;
 }

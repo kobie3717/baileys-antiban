@@ -15,16 +15,26 @@ export interface WarmUpConfig {
   warmUpDays: number;
   /** Messages allowed on day 1 (default: 20) */
   day1Limit: number;
-  /** Growth factor per day (default: 1.8 — roughly doubles daily) */
-  growthFactor: number;
+  /**
+   * Growth factor per day (default: randomized 1.5–2.2 per instance).
+   * A fixed value creates a cross-account fingerprint — all bots using this
+   * library would follow the identical daily growth curve, trivially clusterable.
+   * Leave unset to get a random value in the safe range each time.
+   */
+  growthFactor?: number;
   /** Hours of inactivity before re-entering warm-up (default: 72) */
   inactivityThresholdHours: number;
 }
 
-const DEFAULT_CONFIG: WarmUpConfig = {
+/** Generate a random growth factor in [1.5, 2.2] to avoid cross-account clustering */
+function randomGrowthFactor(): number {
+  return Math.round((1.5 + Math.random() * 0.7) * 100) / 100;
+}
+
+const DEFAULT_CONFIG: Required<WarmUpConfig> = {
   warmUpDays: 7,
   day1Limit: 20,
-  growthFactor: 1.8,
+  growthFactor: randomGrowthFactor(), // intentionally non-deterministic
   inactivityThresholdHours: 72,
 };
 
@@ -49,7 +59,7 @@ export interface WarmUpStatus {
 }
 
 export class WarmUp {
-  private config: WarmUpConfig;
+  private config: Required<WarmUpConfig>;
   private state: WarmUpState;
 
   constructor(config: Partial<WarmUpConfig> = {}, existingState?: WarmUpState) {
