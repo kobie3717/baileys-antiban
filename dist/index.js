@@ -55,5 +55,7 @@ export { generateSessionFingerprint, applySessionFingerprint, getMessageSendJitt
 export { getStealthSocketConfig, rampPresenceAfterConnect, STEALTH_BROWSER_POOL, AbortError, } from './stealthConnect.js';
 // v4.0 new modules
 export { GroupOperationGuard, classifyGroupOpError, extractPrivacyBlock, GROUP_OP_ERRORS, } from './groupOperationGuard.js';
+// v4.1 new modules
+export { LegitimacySignalInjector, } from './legitimacySignalInjector.js';
 // Observability
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, } from './observability.js';

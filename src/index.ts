@@ -155,6 +155,15 @@ export {
   type PrivacyBlockResult,
 } from './groupOperationGuard.js';
 
+// v4.1 new modules
+export {
+  LegitimacySignalInjector,
+  type LegitimacySignalInjectorConfig,
+  type LegitimacySignalStats,
+  type TypoResult,
+  type TypingPause,
+} from './legitimacySignalInjector.js';
+
 // Observability
 export {
   createConsoleLogger,
