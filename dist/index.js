@@ -57,5 +57,7 @@ export { getStealthSocketConfig, rampPresenceAfterConnect, STEALTH_BROWSER_POOL,
 export { GroupOperationGuard, classifyGroupOpError, extractPrivacyBlock, GROUP_OP_ERRORS, } from './groupOperationGuard.js';
 // v4.1 new modules
 export { LegitimacySignalInjector, } from './legitimacySignalInjector.js';
+// v4.2 new modules
+export { BanRecoveryOrchestrator, } from './banRecoveryOrchestrator.js';
 // Observability
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, } from './observability.js';

@@ -164,6 +164,17 @@ export {
   type TypingPause,
 } from './legitimacySignalInjector.js';
 
+// v4.2 new modules
+export {
+  BanRecoveryOrchestrator,
+  type BanEventType,
+  type RecoveryPhase,
+  type RecoveryPlan,
+  type BanRecoveryConfig,
+  type RecoveryState,
+  type RecoveryStatus,
+} from './banRecoveryOrchestrator.js';
+
 // Observability
 export {
   createConsoleLogger,
