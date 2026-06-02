@@ -19,6 +19,9 @@ export interface ResolvedConfig {
     groupProfiles: boolean;
     persist?: string;
     logging: boolean;
+    instanceCoordinator?: string;
+    instancePoolMaxPerMinute?: number;
+    instancePoolMaxPerHour?: number;
     onAtRisk?: (status: HealthStatus) => void;
     onRiskChange?: (status: HealthStatus) => void;
     onTimelockDetected?: (state: TimelockState) => void;

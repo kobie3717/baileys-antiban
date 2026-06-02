@@ -26,6 +26,10 @@ export interface ResolvedConfig {
   persist?: string;
   // Logging
   logging: boolean;
+  // Instance coordination (cross-process rate pooling)
+  instanceCoordinator?: string;           // Path to shared coordination file
+  instancePoolMaxPerMinute?: number;      // Per-minute limit across all instances (default: 20)
+  instancePoolMaxPerHour?: number;        // Per-hour limit across all instances (default: 500)
   // Callbacks (flat — no nested config required)
   onAtRisk?: (status: HealthStatus) => void;
   onRiskChange?: (status: HealthStatus) => void;         // ADD: fires on ALL risk level changes

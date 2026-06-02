@@ -10,7 +10,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRetryJitter = exports.getTypingJitter = exports.getMessageSendJitter = exports.applySessionFingerprint = exports.generateSessionFingerprint = exports.proxyRotator = exports.readReceiptVariance = exports.credsSnapshot = exports.applyFingerprint = exports.generateFingerprint = exports.messageRecovery = exports.applyGroupMultiplier = exports.shouldUseGroupProfile = exports.isBroadcast = exports.isNewsletter = exports.isGroup = exports.StateManager = exports.PRESETS = exports.resolveConfig = exports.FileStateAdapter = exports.Scheduler = exports.WebhookAlerts = exports.ContentVariator = exports.MessageQueue = exports.wrapSocketWithFingerprint = exports.wrapSocket = exports.getRetryReasonDescription = exports.isMacError = exports.parseRetryReason = exports.MAC_ERROR_CODES = exports.MessageRetryReason = exports.createLidFirstResolver = exports.LidFirstResolver = exports.DeafSessionDetector = exports.classifyDisconnect = exports.wrapWithSessionStability = exports.SessionHealthMonitor = exports.JidCanonicalizer = exports.LidResolver = exports.PostReconnectThrottle = exports.RetryReasonTracker = exports.getCircadianMultiplier = exports.PresenceChoreographer = exports.ContactGraphWarmer = exports.ReplyRatioGuard = exports.TimelockGuard = exports.HealthMonitor = exports.WarmUp = exports.RateLimiter = exports.AntiBan = void 0;
-exports.createPeriodicExporter = exports.createMetricsHandler = exports.exportPrometheusMetrics = exports.createConsoleLogger = exports.DeliveryTracker = exports.BanRecoveryOrchestrator = exports.LegitimacySignalInjector = exports.GROUP_OP_ERRORS = exports.extractPrivacyBlock = exports.classifyGroupOpError = exports.GroupOperationGuard = exports.AbortError = exports.STEALTH_BROWSER_POOL = exports.rampPresenceAfterConnect = exports.getStealthSocketConfig = exports.createStealthFingerprint = exports.getBatteryState = exports.getVoiceNoteMetadata = void 0;
+exports.createPeriodicExporter = exports.createMetricsHandler = exports.exportPrometheusMetrics = exports.createConsoleLogger = exports.InstanceCoordinator = exports.DeliveryTracker = exports.BanRecoveryOrchestrator = exports.LegitimacySignalInjector = exports.GROUP_OP_ERRORS = exports.extractPrivacyBlock = exports.classifyGroupOpError = exports.GroupOperationGuard = exports.AbortError = exports.STEALTH_BROWSER_POOL = exports.rampPresenceAfterConnect = exports.getStealthSocketConfig = exports.createStealthFingerprint = exports.getBatteryState = exports.getVoiceNoteMetadata = void 0;
 // Core
 var antiban_js_1 = require("./antiban.js");
 Object.defineProperty(exports, "AntiBan", { enumerable: true, get: function () { return antiban_js_1.AntiBan; } });
@@ -129,6 +129,9 @@ Object.defineProperty(exports, "BanRecoveryOrchestrator", { enumerable: true, ge
 // v4.3 new modules
 var deliveryTracker_js_1 = require("./deliveryTracker.js");
 Object.defineProperty(exports, "DeliveryTracker", { enumerable: true, get: function () { return deliveryTracker_js_1.DeliveryTracker; } });
+// v4.4 new modules
+var instanceCoordinator_js_1 = require("./instanceCoordinator.js");
+Object.defineProperty(exports, "InstanceCoordinator", { enumerable: true, get: function () { return instanceCoordinator_js_1.InstanceCoordinator; } });
 // Observability
 var observability_js_1 = require("./observability.js");
 Object.defineProperty(exports, "createConsoleLogger", { enumerable: true, get: function () { return observability_js_1.createConsoleLogger; } });

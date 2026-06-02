@@ -42,4 +42,5 @@ export { GroupOperationGuard, classifyGroupOpError, extractPrivacyBlock, GROUP_O
 export { LegitimacySignalInjector, type LegitimacySignalInjectorConfig, type LegitimacySignalStats, type TypoResult, type TypingPause, } from './legitimacySignalInjector.js';
 export { BanRecoveryOrchestrator, type BanEventType, type RecoveryPhase, type RecoveryPlan, type BanRecoveryConfig, type RecoveryState, type RecoveryStatus, } from './banRecoveryOrchestrator.js';
 export { DeliveryTracker, type DeliveryTrackerConfig, type DeliveryTrackerStats } from './deliveryTracker.js';
+export { InstanceCoordinator, type InstanceCoordinatorConfig, type InstanceCoordinatorStats } from './instanceCoordinator.js';
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, type AntiBanLogger, type PeriodicExporterConfig, type PeriodicExporterHandle, } from './observability.js';

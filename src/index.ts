@@ -178,6 +178,9 @@ export {
 // v4.3 new modules
 export { DeliveryTracker, type DeliveryTrackerConfig, type DeliveryTrackerStats } from './deliveryTracker.js';
 
+// v4.4 new modules
+export { InstanceCoordinator, type InstanceCoordinatorConfig, type InstanceCoordinatorStats } from './instanceCoordinator.js';
+
 // Observability
 export {
   createConsoleLogger,

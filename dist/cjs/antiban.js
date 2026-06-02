@@ -33,6 +33,7 @@ const presets_js_1 = require("./presets.js");
 const persist_js_1 = require("./persist.js");
 const profiles_js_1 = require("./profiles.js");
 const deliveryTracker_js_1 = require("./deliveryTracker.js");
+const instanceCoordinator_js_1 = require("./instanceCoordinator.js");
 function isLegacyConfig(cfg) {
     if (typeof cfg !== 'object' || cfg === null)
         return false;
@@ -110,6 +111,7 @@ class AntiBan {
     sessionStabilityMonitor = null;
     banRecovery;
     deliveryTracker;
+    instanceCoordinator = null;
     stateManager = null;
     resolvedConfig;
     logging;
@@ -287,6 +289,17 @@ class AntiBan {
             };
             this.sessionStabilityMonitor = new sessionStability_js_1.SessionHealthMonitor(healthConfig);
         }
+        // Initialize instance coordinator if configured
+        if (cfg.instanceCoordinator) {
+            this.instanceCoordinator = new instanceCoordinator_js_1.InstanceCoordinator({
+                sharedFilePath: cfg.instanceCoordinator,
+                poolMaxPerMinute: cfg.instancePoolMaxPerMinute,
+                poolMaxPerHour: cfg.instancePoolMaxPerHour,
+            });
+            if (this.logging) {
+                console.log(`[baileys-antiban] 🌐 Instance coordination enabled: ${cfg.instanceCoordinator}`);
+            }
+        }
     }
     /**
      * Check if a message can be sent and get required delay.
@@ -388,6 +401,22 @@ class AntiBan {
                 reason: reconnectThrottleDecision.reason || 'Post-reconnect throttle',
                 health: healthStatus,
             };
+        }
+        // Cross-instance coordination — check shared IP-level pool
+        if (this.instanceCoordinator) {
+            const slot = this.instanceCoordinator.tryAcquireSlot();
+            if (!slot.allowed) {
+                this.stats.messagesBlocked++;
+                if (this.logging) {
+                    console.log(`[baileys-antiban] 🌐 BLOCKED — instance pool exhausted (shared IP limit), retry in ${slot.retryAfterMs}ms`);
+                }
+                return {
+                    allowed: false,
+                    delayMs: slot.retryAfterMs || 5000,
+                    reason: 'Cross-instance rate pool exhausted',
+                    health: healthStatus,
+                };
+            }
         }
         // Group profile rate check (runs before rateLimiter.getDelay for timing)
         if (this.resolvedConfig.groupProfiles && (0, profiles_js_1.shouldUseGroupProfile)(recipient)) {
@@ -567,6 +596,9 @@ class AntiBan {
         }
         if (this.sessionStabilityMonitor) {
             stats.sessionStability = this.sessionStabilityMonitor.getStats();
+        }
+        if (this.instanceCoordinator) {
+            stats.instanceCoordinator = this.instanceCoordinator.getStats();
         }
         return stats;
     }

@@ -31,6 +31,7 @@ import { resolveConfig, type AntiBanInput, type ResolvedConfig } from './presets
 import { StateManager, type PersistedState } from './persist.js';
 import { shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';
 import { DeliveryTracker, type DeliveryTrackerStats } from './deliveryTracker.js';
+import { InstanceCoordinator, type InstanceCoordinatorStats } from './instanceCoordinator.js';
 
 // Legacy v2 nested config shape — kept for compat shim
 export interface AntiBanConfigLegacy {
@@ -128,6 +129,7 @@ export interface AntiBanStats {
   sessionStability?: SessionHealthStats | null;
   banRecovery?: RecoveryStatus | null;
   deliveryTracker: DeliveryTrackerStats;
+  instanceCoordinator?: InstanceCoordinatorStats | null;
 }
 
 export class AntiBan {
@@ -145,6 +147,7 @@ export class AntiBan {
   private sessionStabilityMonitor: SessionHealthMonitor | null = null;
   private banRecovery: BanRecoveryOrchestrator;
   private deliveryTracker: DeliveryTracker;
+  private instanceCoordinator: InstanceCoordinator | null = null;
   private stateManager: StateManager | null = null;
   private resolvedConfig: ResolvedConfig;
   private logging: boolean;
@@ -335,6 +338,18 @@ export class AntiBan {
       };
       this.sessionStabilityMonitor = new SessionHealthMonitor(healthConfig);
     }
+
+    // Initialize instance coordinator if configured
+    if (cfg.instanceCoordinator) {
+      this.instanceCoordinator = new InstanceCoordinator({
+        sharedFilePath: cfg.instanceCoordinator,
+        poolMaxPerMinute: cfg.instancePoolMaxPerMinute,
+        poolMaxPerHour: cfg.instancePoolMaxPerHour,
+      });
+      if (this.logging) {
+        console.log(`[baileys-antiban] 🌐 Instance coordination enabled: ${cfg.instanceCoordinator}`);
+      }
+    }
   }
 
   /**
@@ -444,6 +459,23 @@ export class AntiBan {
         reason: reconnectThrottleDecision.reason || 'Post-reconnect throttle',
         health: healthStatus,
       };
+    }
+
+    // Cross-instance coordination — check shared IP-level pool
+    if (this.instanceCoordinator) {
+      const slot = this.instanceCoordinator.tryAcquireSlot();
+      if (!slot.allowed) {
+        this.stats.messagesBlocked++;
+        if (this.logging) {
+          console.log(`[baileys-antiban] 🌐 BLOCKED — instance pool exhausted (shared IP limit), retry in ${slot.retryAfterMs}ms`);
+        }
+        return {
+          allowed: false,
+          delayMs: slot.retryAfterMs || 5000,
+          reason: 'Cross-instance rate pool exhausted',
+          health: healthStatus,
+        };
+      }
     }
 
     // Group profile rate check (runs before rateLimiter.getDelay for timing)
@@ -646,6 +678,9 @@ export class AntiBan {
     }
     if (this.sessionStabilityMonitor) {
       stats.sessionStability = this.sessionStabilityMonitor.getStats();
+    }
+    if (this.instanceCoordinator) {
+      stats.instanceCoordinator = this.instanceCoordinator.getStats();
     }
 
     return stats;

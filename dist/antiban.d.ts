@@ -28,6 +28,7 @@ import { SessionHealthMonitor, type SessionHealthStats } from './sessionStabilit
 import { BanRecoveryOrchestrator, type RecoveryStatus } from './banRecoveryOrchestrator.js';
 import { type AntiBanInput, type ResolvedConfig } from './presets.js';
 import { type DeliveryTrackerStats } from './deliveryTracker.js';
+import { type InstanceCoordinatorStats } from './instanceCoordinator.js';
 export interface AntiBanConfigLegacy {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
@@ -74,6 +75,7 @@ export interface AntiBanStats {
     sessionStability?: SessionHealthStats | null;
     banRecovery?: RecoveryStatus | null;
     deliveryTracker: DeliveryTrackerStats;
+    instanceCoordinator?: InstanceCoordinatorStats | null;
 }
 export declare class AntiBan {
     private rateLimiter;
@@ -90,6 +92,7 @@ export declare class AntiBan {
     private sessionStabilityMonitor;
     private banRecovery;
     private deliveryTracker;
+    private instanceCoordinator;
     private stateManager;
     private resolvedConfig;
     private logging;

@@ -61,5 +61,7 @@ export { LegitimacySignalInjector, } from './legitimacySignalInjector.js';
 export { BanRecoveryOrchestrator, } from './banRecoveryOrchestrator.js';
 // v4.3 new modules
 export { DeliveryTracker } from './deliveryTracker.js';
+// v4.4 new modules
+export { InstanceCoordinator } from './instanceCoordinator.js';
 // Observability
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, } from './observability.js';
