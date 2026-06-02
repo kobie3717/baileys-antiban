@@ -76,7 +76,7 @@ exports.PRESETS = {
         day1Limit: 60,
         growthFactor: 2.5,
         inactivityThresholdHours: 24,
-        autoPauseAt: 'critical',
+        autoPauseAt: 'high', // Pause at HIGH not CRITICAL (too late)
         groupMultiplier: 0.95,
         groupProfiles: true,
         logging: true,

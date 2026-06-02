@@ -26,6 +26,7 @@ import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThro
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 import { SessionHealthMonitor, type SessionHealthConfig, type SessionHealthStats } from './sessionStability.js';
+import { BanRecoveryOrchestrator, type RecoveryStatus } from './banRecoveryOrchestrator.js';
 import { resolveConfig, type AntiBanInput, type ResolvedConfig } from './presets.js';
 import { StateManager, type PersistedState } from './persist.js';
 import { shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';
@@ -124,6 +125,7 @@ export interface AntiBanStats {
   lidResolver?: LidResolverStats | null;
   jidCanonicalizer?: JidCanonicalizerStats | null;
   sessionStability?: SessionHealthStats | null;
+  banRecovery?: RecoveryStatus | null;
 }
 
 export class AntiBan {
@@ -139,6 +141,7 @@ export class AntiBan {
   private lidResolverModule: LidResolver | null = null;
   private jidCanonicalizerModule: JidCanonicalizer | null = null;
   private sessionStabilityMonitor: SessionHealthMonitor | null = null;
+  private banRecovery: BanRecoveryOrchestrator;
   private stateManager: StateManager | null = null;
   private resolvedConfig: ResolvedConfig;
   private logging: boolean;
@@ -219,14 +222,34 @@ export class AntiBan {
         if ((status.risk === 'high' || status.risk === 'critical') && cfg.onAtRisk) {
           cfg.onAtRisk(status);
         }
+        // Trigger recovery orchestrator on critical risk
+        if (status.risk === 'critical') {
+          this.banRecovery.recordBanEvent('soft_ban');
+        }
         cfg.onRiskChange?.(status);
         legacyPassthrough?.health?.onRiskChange?.(status);
       },
     });
+
+    // Initialize ban recovery orchestrator
+    this.banRecovery = new BanRecoveryOrchestrator({
+      onPhaseChange: (phase, plan) => {
+        if (this.logging) {
+          console.log(`[baileys-antiban] 🔄 Recovery phase: ${phase} — ${plan.description}`);
+        }
+      },
+      onHardBan: () => {
+        if (this.logging) {
+          console.log(`[baileys-antiban] 💀 HARD BAN detected — account likely dead, replace SIM`);
+        }
+      },
+    });
+
     this.timelockGuard = new TimelockGuard({
       ...(legacyPassthrough?.timelock || {}),
       onTimelockDetected: (state) => {
         this.health.recordReachoutTimelock(state.enforcementType);
+        this.banRecovery.recordBanEvent('timelock');
         if (this.logging) {
           console.log(`[baileys-antiban] REACHOUT TIMELOCKED — ${state.enforcementType || 'unknown'}, expires ${state.expiresAt?.toISOString() || 'unknown'}`);
         }
@@ -319,6 +342,18 @@ export class AntiBan {
         allowed: false,
         delayMs: 0,
         reason: `Health risk ${healthStatus.risk}: ${healthStatus.recommendation}`,
+        health: healthStatus,
+      };
+    }
+
+    // Recovery orchestrator rate multiplier
+    const recoveryStatus = this.banRecovery.getStatus();
+    if (recoveryStatus.phase === 'paused') {
+      this.stats.messagesBlocked++;
+      return {
+        allowed: false,
+        delayMs: recoveryStatus.pauseRemainingMs || 0,
+        reason: `Ban recovery: ${recoveryStatus.recommendation}`,
         health: healthStatus,
       };
     }
@@ -539,6 +574,7 @@ export class AntiBan {
       health: this.health.getStatus(),
       warmUp: this.warmUp.getStatus(),
       rateLimiter: this.rateLimiter.getStats(),
+      banRecovery: this.banRecovery.getStatus(),
     };
 
     // Only include new stats if enabled
@@ -613,6 +649,11 @@ export class AntiBan {
   /** Get the session stability monitor for direct access */
   get sessionStability(): SessionHealthMonitor | null {
     return this.sessionStabilityMonitor;
+  }
+
+  /** Get the ban recovery orchestrator for direct access */
+  get recoveryOrchestrator(): BanRecoveryOrchestrator {
+    return this.banRecovery;
   }
 
   /**

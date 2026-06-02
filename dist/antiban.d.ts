@@ -25,6 +25,7 @@ import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThro
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
 import { SessionHealthMonitor, type SessionHealthStats } from './sessionStability.js';
+import { BanRecoveryOrchestrator, type RecoveryStatus } from './banRecoveryOrchestrator.js';
 import { type AntiBanInput, type ResolvedConfig } from './presets.js';
 export interface AntiBanConfigLegacy {
     rateLimiter?: Partial<RateLimiterConfig>;
@@ -70,6 +71,7 @@ export interface AntiBanStats {
     lidResolver?: LidResolverStats | null;
     jidCanonicalizer?: JidCanonicalizerStats | null;
     sessionStability?: SessionHealthStats | null;
+    banRecovery?: RecoveryStatus | null;
 }
 export declare class AntiBan {
     private rateLimiter;
@@ -84,6 +86,7 @@ export declare class AntiBan {
     private lidResolverModule;
     private jidCanonicalizerModule;
     private sessionStabilityMonitor;
+    private banRecovery;
     private stateManager;
     private resolvedConfig;
     private logging;
@@ -145,6 +148,8 @@ export declare class AntiBan {
     get jidCanonicalizer(): JidCanonicalizer | null;
     /** Get the session stability monitor for direct access */
     get sessionStability(): SessionHealthMonitor | null;
+    /** Get the ban recovery orchestrator for direct access */
+    get recoveryOrchestrator(): BanRecoveryOrchestrator;
     /**
      * Export warm-up state for persistence between restarts
      */

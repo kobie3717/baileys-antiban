@@ -25,6 +25,7 @@ import { PostReconnectThrottle } from './reconnectThrottle.js';
 import { LidResolver } from './lidResolver.js';
 import { JidCanonicalizer } from './jidCanonicalizer.js';
 import { SessionHealthMonitor } from './sessionStability.js';
+import { BanRecoveryOrchestrator } from './banRecoveryOrchestrator.js';
 import { resolveConfig } from './presets.js';
 import { StateManager } from './persist.js';
 import { shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';
@@ -103,6 +104,7 @@ export class AntiBan {
     lidResolverModule = null;
     jidCanonicalizerModule = null;
     sessionStabilityMonitor = null;
+    banRecovery;
     stateManager = null;
     resolvedConfig;
     logging;
@@ -173,14 +175,32 @@ export class AntiBan {
                 if ((status.risk === 'high' || status.risk === 'critical') && cfg.onAtRisk) {
                     cfg.onAtRisk(status);
                 }
+                // Trigger recovery orchestrator on critical risk
+                if (status.risk === 'critical') {
+                    this.banRecovery.recordBanEvent('soft_ban');
+                }
                 cfg.onRiskChange?.(status);
                 legacyPassthrough?.health?.onRiskChange?.(status);
+            },
+        });
+        // Initialize ban recovery orchestrator
+        this.banRecovery = new BanRecoveryOrchestrator({
+            onPhaseChange: (phase, plan) => {
+                if (this.logging) {
+                    console.log(`[baileys-antiban] 🔄 Recovery phase: ${phase} — ${plan.description}`);
+                }
+            },
+            onHardBan: () => {
+                if (this.logging) {
+                    console.log(`[baileys-antiban] 💀 HARD BAN detected — account likely dead, replace SIM`);
+                }
             },
         });
         this.timelockGuard = new TimelockGuard({
             ...(legacyPassthrough?.timelock || {}),
             onTimelockDetected: (state) => {
                 this.health.recordReachoutTimelock(state.enforcementType);
+                this.banRecovery.recordBanEvent('timelock');
                 if (this.logging) {
                     console.log(`[baileys-antiban] REACHOUT TIMELOCKED — ${state.enforcementType || 'unknown'}, expires ${state.expiresAt?.toISOString() || 'unknown'}`);
                 }
@@ -271,6 +291,17 @@ export class AntiBan {
                 allowed: false,
                 delayMs: 0,
                 reason: `Health risk ${healthStatus.risk}: ${healthStatus.recommendation}`,
+                health: healthStatus,
+            };
+        }
+        // Recovery orchestrator rate multiplier
+        const recoveryStatus = this.banRecovery.getStatus();
+        if (recoveryStatus.phase === 'paused') {
+            this.stats.messagesBlocked++;
+            return {
+                allowed: false,
+                delayMs: recoveryStatus.pauseRemainingMs || 0,
+                reason: `Ban recovery: ${recoveryStatus.recommendation}`,
                 health: healthStatus,
             };
         }
@@ -466,6 +497,7 @@ export class AntiBan {
             health: this.health.getStatus(),
             warmUp: this.warmUp.getStatus(),
             rateLimiter: this.rateLimiter.getStats(),
+            banRecovery: this.banRecovery.getStatus(),
         };
         // Only include new stats if enabled
         if (this.replyRatioGuard['config']?.enabled) {
@@ -529,6 +561,10 @@ export class AntiBan {
     /** Get the session stability monitor for direct access */
     get sessionStability() {
         return this.sessionStabilityMonitor;
+    }
+    /** Get the ban recovery orchestrator for direct access */
+    get recoveryOrchestrator() {
+        return this.banRecovery;
     }
     /**
      * Export warm-up state for persistence between restarts
