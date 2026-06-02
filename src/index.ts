@@ -181,6 +181,10 @@ export { DeliveryTracker, type DeliveryTrackerConfig, type DeliveryTrackerStats 
 // v4.4 new modules
 export { InstanceCoordinator, type InstanceCoordinatorConfig, type InstanceCoordinatorStats } from './instanceCoordinator.js';
 
+// v4.7 new modules
+export { JidCircuitBreaker, createJidCircuitBreaker, type JidCircuitBreakerConfig, type CircuitState, type JidCircuitBreakerStats } from './jidCircuitBreaker.js';
+export { createFleetEventStore, createMySQLEventStoreBackend, createInMemoryEventStoreBackend, type FleetEventType, type FleetEvent, type FleetEventStoreConfig, type FleetEventStoreHandle, type EventStoreBackend } from './fleetEventStore.js';
+
 // Observability
 export {
   createConsoleLogger,

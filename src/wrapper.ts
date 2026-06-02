@@ -33,6 +33,8 @@ import { DeafSessionDetector, type DeafSessionConfig } from './sessionStability.
 import type { WarmUpState } from './warmup.js';
 import { GroupOperationGuard, type GroupOperationGuardConfig } from './groupOperationGuard.js';
 import { LegitimacySignalInjector, type LegitimacySignalInjectorConfig } from './legitimacySignalInjector.js';
+import { JidCircuitBreaker } from './jidCircuitBreaker.js';
+import type { FleetEventStoreHandle } from './fleetEventStore.js';
 
 export type WASocket = {
   sendMessage: (jid: string, content: any, options?: any) => Promise<any>;
@@ -75,6 +77,16 @@ export interface WrapSocketOptions {
    * Default: enabled with recommended settings.
    */
   legitimacySignals?: LegitimacySignalInjectorConfig | false;
+  /**
+   * Per-JID circuit breaker for send protection.
+   * Blocks sends to problematic recipients after threshold failures.
+   */
+  circuitBreaker?: JidCircuitBreaker;
+  /**
+   * Fleet event store for multi-instance coordination.
+   * Emit/poll ban/warn/recovery events across instances.
+   */
+  fleetEventStore?: FleetEventStoreHandle;
 }
 
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
@@ -149,10 +161,26 @@ export function wrapSocket<T extends WASocket>(
           antiban.destroy(); // Clean up all timers
           deafDetector?.onDisconnect();
           deafDetector?.destroy();
+
+          // Fleet event: detect ban-like disconnect codes
+          if (options.fleetEventStore) {
+            const banCodes = [401, 403, 428, 515]; // 401=logged out, 403=forbidden, 428=banned, 515=restart required
+            if (typeof reason === 'number' && banCodes.includes(reason)) {
+              void options.fleetEventStore.emit('ban', { statusCode: reason });
+            }
+          }
         }
         if (update.connection === 'open') {
           antiban.onReconnect();
           deafDetector?.onConnect();
+
+          // Fleet event: recovery from previous ban/warn
+          if (options.fleetEventStore) {
+            const health = antiban.getStats().health;
+            if (health.risk === 'low') {
+              void options.fleetEventStore.emit('recovery', { risk: health.risk });
+            }
+          }
         }
         // Reachout timelock detection
         if (update.reachoutTimeLock) {
@@ -161,6 +189,14 @@ export function wrapSocket<T extends WASocket>(
             timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
             enforcementType: update.reachoutTimeLock.enforcementType,
           });
+
+          // Fleet event: timelock
+          if (options.fleetEventStore && update.reachoutTimeLock.isActive) {
+            void options.fleetEventStore.emit('timelock', {
+              enforcementType: update.reachoutTimeLock.enforcementType,
+              endsAt: update.reachoutTimeLock.timeEnforcementEnds,
+            });
+          }
         }
       }
 
@@ -176,6 +212,10 @@ export function wrapSocket<T extends WASocket>(
               : [];
             if (params.includes(463) || params.includes('463')) {
               antiban.timelock.record463Error();
+              // Fleet event: rate limit detected
+              if (options.fleetEventStore) {
+                void options.fleetEventStore.emit('rate_limit', { error: '463' });
+              }
             }
           }
           // Retry tracking
@@ -247,10 +287,26 @@ export function wrapSocket<T extends WASocket>(
         antiban.destroy(); // Clean up all timers
         deafDetector?.onDisconnect();
         deafDetector?.destroy();
+
+        // Fleet event: detect ban-like disconnect codes
+        if (options.fleetEventStore) {
+          const banCodes = [401, 403, 428, 515]; // 401=logged out, 403=forbidden, 428=banned, 515=restart required
+          if (typeof reason === 'number' && banCodes.includes(reason)) {
+            void options.fleetEventStore.emit('ban', { statusCode: reason });
+          }
+        }
       }
       if (update.connection === 'open') {
         antiban.onReconnect();
         deafDetector?.onConnect();
+
+        // Fleet event: recovery from previous ban/warn
+        if (options.fleetEventStore) {
+          const health = antiban.getStats().health;
+          if (health.risk === 'low') {
+            void options.fleetEventStore.emit('recovery', { risk: health.risk });
+          }
+        }
       }
       // Reachout timelock detection
       if (update.reachoutTimeLock) {
@@ -259,6 +315,14 @@ export function wrapSocket<T extends WASocket>(
           timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
           enforcementType: update.reachoutTimeLock.enforcementType,
         });
+
+        // Fleet event: timelock
+        if (options.fleetEventStore && update.reachoutTimeLock.isActive) {
+          void options.fleetEventStore.emit('timelock', {
+            enforcementType: update.reachoutTimeLock.enforcementType,
+            endsAt: update.reachoutTimeLock.timeEnforcementEnds,
+          });
+        }
       }
     });
 
@@ -271,6 +335,10 @@ export function wrapSocket<T extends WASocket>(
           const params = update.update.messageStubParameters;
           if (params.includes(463) || params.includes('463')) {
             antiban.timelock.record463Error();
+            // Fleet event: rate limit detected
+            if (options.fleetEventStore) {
+              void options.fleetEventStore.emit('rate_limit', { error: '463' });
+            }
           }
         }
         // Retry tracking
@@ -367,15 +435,31 @@ export function wrapSocket<T extends WASocket>(
     // Chain this send onto the previous — each waits for the prior send's
     // afterSend to commit before running its own beforeSend check.
     const sendResult = sendLock.then(async () => {
+      // Circuit breaker check (before antiban.beforeSend)
+      if (options.circuitBreaker) {
+        if (!options.circuitBreaker.canSend(canonicalJid)) {
+          throw new Error('[baileys-antiban] circuit-breaker: send blocked for ' + canonicalJid);
+        }
+      }
+
       const decision = await antiban.beforeSend(canonicalJid, text);
 
       if (!decision.allowed) {
         throw new Error(`[baileys-antiban] Message blocked: ${decision.reason}`);
       }
 
-      // Apply delay
+      // Apply delay from rate limiter
       if (decision.delayMs > 0) {
         await new Promise(resolve => setTimeout(resolve, decision.delayMs));
+      }
+
+      // Apply circuit breaker jitter for broadcast messages
+      if (options.circuitBreaker) {
+        const isBroadcast = canonicalJid.endsWith('@broadcast') || canonicalJid.endsWith('@newsletter');
+        const jitter = options.circuitBreaker.getJitter(isBroadcast);
+        if (jitter > 0) {
+          await new Promise(resolve => setTimeout(resolve, jitter));
+        }
       }
 
       // Send message (using canonical JID)
@@ -407,8 +491,17 @@ export function wrapSocket<T extends WASocket>(
         if (msgId) {
           antiban.retryTracker.clear(msgId);
         }
+        // Circuit breaker success
+        if (options.circuitBreaker) {
+          options.circuitBreaker.recordSuccess(canonicalJid);
+        }
         return result;
       } catch (error) {
+        // Circuit breaker failure
+        if (options.circuitBreaker) {
+          options.circuitBreaker.recordFailure(canonicalJid);
+        }
+
         // Baileys PR #2587: partial-encrypt Boom now carries structured data:
         //   error.data.failed[]   — per-recipient { jid, error } failures
         //   error.data.firstCause — most likely root cause string
