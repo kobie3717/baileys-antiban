@@ -65,7 +65,7 @@ export {
 } from './retryReason.js';
 
 // Socket wrapper
-export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
+export { wrapSocket, wrapSocketWithFingerprint, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 
 // Optional features
 export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';

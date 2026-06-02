@@ -22,7 +22,7 @@ export { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerSta
 export { SessionHealthMonitor, type SessionHealthStats, type SessionHealthConfig, wrapWithSessionStability, type SessionStabilityConfig, classifyDisconnect, type DisconnectClassification, type DisconnectCategory, DeafSessionDetector, type DeafSessionConfig, type DeafSessionInfo, } from './sessionStability.js';
 export { LidFirstResolver, createLidFirstResolver, type LidPhoneMapping, } from './lidFirstResolver.js';
 export { MessageRetryReason, MAC_ERROR_CODES, parseRetryReason, isMacError, getRetryReasonDescription, } from './retryReason.js';
-export { wrapSocket, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
+export { wrapSocket, wrapSocketWithFingerprint, type WrappedSocket, type WrapSocketOptions } from './wrapper.js';
 export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';
 export { ContentVariator, type VariatorConfig } from './contentVariator.js';
 export { WebhookAlerts, type WebhookConfig } from './webhooks.js';

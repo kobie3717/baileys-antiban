@@ -29,7 +29,7 @@ export { SessionHealthMonitor, wrapWithSessionStability, classifyDisconnect, Dea
 export { LidFirstResolver, createLidFirstResolver, } from './lidFirstResolver.js';
 export { MessageRetryReason, MAC_ERROR_CODES, parseRetryReason, isMacError, getRetryReasonDescription, } from './retryReason.js';
 // Socket wrapper
-export { wrapSocket } from './wrapper.js';
+export { wrapSocket, wrapSocketWithFingerprint } from './wrapper.js';
 // Optional features
 export { MessageQueue } from './messageQueue.js';
 export { ContentVariator } from './contentVariator.js';

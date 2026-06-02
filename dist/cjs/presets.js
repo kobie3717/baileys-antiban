@@ -19,7 +19,7 @@ exports.PRESETS = {
         inactivityThresholdHours: 72,
         autoPauseAt: 'medium',
         groupMultiplier: 0.5,
-        groupProfiles: false,
+        groupProfiles: true,
         logging: true,
     },
     moderate: {
@@ -38,7 +38,7 @@ exports.PRESETS = {
         inactivityThresholdHours: 72,
         autoPauseAt: 'high',
         groupMultiplier: 0.7,
-        groupProfiles: false,
+        groupProfiles: true,
         logging: true,
     },
     aggressive: {
@@ -55,9 +55,9 @@ exports.PRESETS = {
         day1Limit: 35,
         growthFactor: 2.0,
         inactivityThresholdHours: 48,
-        autoPauseAt: 'critical',
+        autoPauseAt: 'high',
         groupMultiplier: 0.9,
-        groupProfiles: false,
+        groupProfiles: true,
         logging: true,
     },
     // For established, fully-warmed accounts running enterprise-scale operations.
@@ -78,7 +78,7 @@ exports.PRESETS = {
         inactivityThresholdHours: 24,
         autoPauseAt: 'critical',
         groupMultiplier: 0.95,
-        groupProfiles: false,
+        groupProfiles: true,
         logging: true,
     },
 };
@@ -90,12 +90,20 @@ function resolveConfig(input) {
         if (!(input in exports.PRESETS)) {
             throw new Error(`Unknown preset "${input}". Valid: conservative, moderate, aggressive, high-volume`);
         }
+        // Warn if using high-volume preset
+        if (input === 'high-volume') {
+            console.warn('[baileys-antiban] WARNING: high-volume preset requires an established account (6+ months). Using on new accounts will result in immediate bans. Set accountAgeDays in config to suppress this warning.');
+        }
         return { ...exports.PRESETS[input] };
     }
     // Object form — extract preset base, merge overrides
     const { preset = 'conservative', ...overrides } = input;
     if (!(preset in exports.PRESETS)) {
         throw new Error(`Unknown preset "${preset}". Valid: conservative, moderate, aggressive, high-volume`);
+    }
+    // Warn if using high-volume preset (unless accountAgeDays is set)
+    if (preset === 'high-volume' && !('accountAgeDays' in overrides)) {
+        console.warn('[baileys-antiban] WARNING: high-volume preset requires an established account (6+ months). Using on new accounts will result in immediate bans. Set accountAgeDays in config to suppress this warning.');
     }
     return { ...exports.PRESETS[preset], ...overrides };
 }

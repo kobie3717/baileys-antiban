@@ -31,12 +31,21 @@
 import { AntiBan, type AntiBanConfig } from './antiban.js';
 import { DeafSessionDetector, type DeafSessionConfig } from './sessionStability.js';
 import type { WarmUpState } from './warmup.js';
+import { GroupOperationGuard, type GroupOperationGuardConfig } from './groupOperationGuard.js';
+import { LegitimacySignalInjector, type LegitimacySignalInjectorConfig } from './legitimacySignalInjector.js';
 
 export type WASocket = {
   sendMessage: (jid: string, content: any, options?: any) => Promise<any>;
+  groupParticipantsUpdate?: (jid: string, participants: string[], action: string) => Promise<any>;
+  groupCreate?: (subject: string, participants: string[]) => Promise<any>;
   ev: any;
   [key: string]: any;
 };
+
+export type SocketConfig = Record<string, any>;
+
+export type AnyMessageContent = Record<string, any>;
+export type MiscMessageGenerationOptions = Record<string, any>;
 
 /**
  * A Baileys socket wrapped with anti-ban protection.
@@ -54,6 +63,18 @@ export interface WrapSocketOptions {
    * Pass a config object to enable; omit to disable.
    */
   deafSession?: DeafSessionConfig;
+  /**
+   * Group operation rate limiting (adds, removes, creates).
+   * Pass false to disable, or pass a config object to customize limits.
+   * Default: enabled with conservative limits.
+   */
+  groupOpGuard?: GroupOperationGuardConfig | false;
+  /**
+   * Legitimacy signal injection (typos, read gaps, typing pauses).
+   * Pass false to disable, or pass a config object to customize.
+   * Default: enabled with recommended settings.
+   */
+  legitimacySignals?: LegitimacySignalInjectorConfig | false;
 }
 
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
@@ -81,6 +102,38 @@ export function wrapSocket<T extends WASocket>(
     ? new DeafSessionDetector(options.deafSession)
     : null;
   if (deafDetector) deafDetector.attach(sock as unknown as { end: (err?: Error) => void });
+
+  // Group operation guard — intercept group methods with rate limiting
+  if (options.groupOpGuard !== false) {
+    const guard = new GroupOperationGuard(options.groupOpGuard || {});
+
+    const origUpdate = sock.groupParticipantsUpdate?.bind(sock);
+    if (origUpdate) {
+      (sock as any).groupParticipantsUpdate = async (jid: string, participants: string[], action: string) => {
+        const op = action === 'add' ? 'add' : action === 'remove' ? 'remove' : 'add';
+        const check = guard.check(op, jid);
+        if (!check.allowed) throw new Error(check.reason || 'Group operation rate limited');
+        return origUpdate(jid, participants, action);
+      };
+    }
+
+    const origCreate = sock.groupCreate?.bind(sock);
+    if (origCreate) {
+      (sock as any).groupCreate = async (subject: string, participants: string[]) => {
+        const check = guard.check('create', subject);
+        if (!check.allowed) throw new Error(check.reason || 'Group creation rate limited');
+        return origCreate(subject, participants);
+      };
+    }
+  }
+
+  // Legitimacy signal injector — wrap sendMessage for typo injection
+  let legitimacyInjector: LegitimacySignalInjector | null = null;
+  if (options.legitimacySignals !== false) {
+    legitimacyInjector = new LegitimacySignalInjector(
+      typeof options.legitimacySignals === 'object' ? options.legitimacySignals : {}
+    );
+  }
 
   // Hook into Baileys events for health monitoring
   // Prefer ev.process() (Baileys ≥ late 2022) for batched event handling
@@ -287,7 +340,13 @@ export function wrapSocket<T extends WASocket>(
     const canonicalJid = antiban.jidCanonicalizer?.canonicalizeTarget(jid) || jid;
 
     // Extract text content for rate limiter analysis
-    const text = content?.text || content?.caption || content?.image?.caption || '';
+    let text = content?.text || content?.caption || content?.image?.caption || '';
+
+    // Check for typo injection (only for text messages)
+    let typoResult: ReturnType<LegitimacySignalInjector['shouldInjectTypo']> = null;
+    if (legitimacyInjector && content?.text && typeof content.text === 'string' && content.text.length > 10) {
+      typoResult = legitimacyInjector.shouldInjectTypo(content.text);
+    }
 
     // Chain this send onto the previous — each waits for the prior send's
     // afterSend to commit before running its own beforeSend check.
@@ -304,8 +363,26 @@ export function wrapSocket<T extends WASocket>(
       }
 
       // Send message (using canonical JID)
+      // If typo injection is active, send typo first, then correction
       try {
-        const result = await originalSendMessage(canonicalJid, content, options);
+        let result: any;
+
+        if (typoResult) {
+          // Send typo version first
+          const typoContent = { ...content, text: typoResult.typoText };
+          await originalSendMessage(canonicalJid, typoContent, options);
+
+          // Wait for correction delay
+          await new Promise(r => setTimeout(r, typoResult.correctionDelay));
+
+          // Send corrected version
+          const correctionContent = { ...content, text: typoResult.correctionText };
+          result = await originalSendMessage(canonicalJid, correctionContent, options);
+        } else {
+          // Normal send
+          result = await originalSendMessage(canonicalJid, content, options);
+        }
+
         antiban.afterSend(canonicalJid, text);
         antiban.timelock.registerKnownChat(canonicalJid);
         // Clear retry tracking on successful send
@@ -349,4 +426,43 @@ export function wrapSocket<T extends WASocket>(
   (wrapped.antiban as any).destroy = antiban.destroy.bind(antiban);
 
   return wrapped;
+}
+
+/**
+ * Helper function to create a wrapped socket with device fingerprint applied.
+ *
+ * This combines device fingerprint generation, socket creation, and wrapping
+ * into a single call.
+ *
+ * Usage:
+ *   import makeWASocket from 'baileys';
+ *   import { wrapSocketWithFingerprint } from 'baileys-antiban';
+ *
+ *   const wrapped = wrapSocketWithFingerprint(makeWASocket, socketConfig, {
+ *     fingerprintSeed: 'stable-seed-123',
+ *     groupOpGuard: {},
+ *     legitimacySignals: {}
+ *   });
+ *
+ * @param makeWASocket - Baileys makeWASocket factory function
+ * @param socketConfig - Base socket configuration
+ * @param wrapOptions - Combined wrapper options + fingerprintSeed
+ */
+export function wrapSocketWithFingerprint<T extends SocketConfig>(
+  makeWASocket: (config: T) => WASocket,
+  socketConfig: T,
+  wrapOptions?: WrapSocketOptions & { fingerprintSeed?: string }
+): WrappedSocket {
+  // Import fingerprint functions dynamically to avoid circular deps
+  const { generateFingerprint, applyFingerprint } = require('./deviceFingerprint.js');
+
+  const seed = wrapOptions?.fingerprintSeed ||
+    (socketConfig as any).auth?.creds?.me?.id ||
+    String(Date.now());
+
+  const fp = generateFingerprint({ seed });
+  const config = applyFingerprint(socketConfig, fp);
+  const sock = makeWASocket(config);
+
+  return wrapSocket(sock, undefined, undefined, wrapOptions);
 }

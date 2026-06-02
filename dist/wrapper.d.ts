@@ -30,11 +30,18 @@
 import { AntiBan, type AntiBanConfig } from './antiban.js';
 import { type DeafSessionConfig } from './sessionStability.js';
 import type { WarmUpState } from './warmup.js';
+import { type GroupOperationGuardConfig } from './groupOperationGuard.js';
+import { type LegitimacySignalInjectorConfig } from './legitimacySignalInjector.js';
 export type WASocket = {
     sendMessage: (jid: string, content: any, options?: any) => Promise<any>;
+    groupParticipantsUpdate?: (jid: string, participants: string[], action: string) => Promise<any>;
+    groupCreate?: (subject: string, participants: string[]) => Promise<any>;
     ev: any;
     [key: string]: any;
 };
+export type SocketConfig = Record<string, any>;
+export type AnyMessageContent = Record<string, any>;
+export type MiscMessageGenerationOptions = Record<string, any>;
 /**
  * A Baileys socket wrapped with anti-ban protection.
  *
@@ -51,6 +58,18 @@ export interface WrapSocketOptions {
      * Pass a config object to enable; omit to disable.
      */
     deafSession?: DeafSessionConfig;
+    /**
+     * Group operation rate limiting (adds, removes, creates).
+     * Pass false to disable, or pass a config object to customize limits.
+     * Default: enabled with conservative limits.
+     */
+    groupOpGuard?: GroupOperationGuardConfig | false;
+    /**
+     * Legitimacy signal injection (typos, read gaps, typing pauses).
+     * Pass false to disable, or pass a config object to customize.
+     * Default: enabled with recommended settings.
+     */
+    legitimacySignals?: LegitimacySignalInjectorConfig | false;
 }
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
     antiban: AntiBan;
@@ -60,3 +79,26 @@ export type WrappedSocket<T extends WASocket = WASocket> = T & {
  * The returned socket has the same API but sendMessage() is protected.
  */
 export declare function wrapSocket<T extends WASocket>(sock: T, config?: AntiBanConfig, warmUpState?: WarmUpState, wrapOptions?: WrapSocketOptions): WrappedSocket<T>;
+/**
+ * Helper function to create a wrapped socket with device fingerprint applied.
+ *
+ * This combines device fingerprint generation, socket creation, and wrapping
+ * into a single call.
+ *
+ * Usage:
+ *   import makeWASocket from 'baileys';
+ *   import { wrapSocketWithFingerprint } from 'baileys-antiban';
+ *
+ *   const wrapped = wrapSocketWithFingerprint(makeWASocket, socketConfig, {
+ *     fingerprintSeed: 'stable-seed-123',
+ *     groupOpGuard: {},
+ *     legitimacySignals: {}
+ *   });
+ *
+ * @param makeWASocket - Baileys makeWASocket factory function
+ * @param socketConfig - Base socket configuration
+ * @param wrapOptions - Combined wrapper options + fingerprintSeed
+ */
+export declare function wrapSocketWithFingerprint<T extends SocketConfig>(makeWASocket: (config: T) => WASocket, socketConfig: T, wrapOptions?: WrapSocketOptions & {
+    fingerprintSeed?: string;
+}): WrappedSocket;
