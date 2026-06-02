@@ -32,6 +32,7 @@ const banRecoveryOrchestrator_js_1 = require("./banRecoveryOrchestrator.js");
 const presets_js_1 = require("./presets.js");
 const persist_js_1 = require("./persist.js");
 const profiles_js_1 = require("./profiles.js");
+const deliveryTracker_js_1 = require("./deliveryTracker.js");
 function isLegacyConfig(cfg) {
     if (typeof cfg !== 'object' || cfg === null)
         return false;
@@ -108,6 +109,7 @@ class AntiBan {
     jidCanonicalizerModule = null;
     sessionStabilityMonitor = null;
     banRecovery;
+    deliveryTracker;
     stateManager = null;
     resolvedConfig;
     logging;
@@ -196,6 +198,14 @@ class AntiBan {
             onHardBan: () => {
                 if (this.logging) {
                     console.log(`[baileys-antiban] 💀 HARD BAN detected — account likely dead, replace SIM`);
+                }
+            },
+        });
+        // Initialize delivery tracker
+        this.deliveryTracker = new deliveryTracker_js_1.DeliveryTracker({
+            onLowDeliveryRate: (rate) => {
+                if (this.logging) {
+                    console.log(`[baileys-antiban] ⚠️  Low delivery rate detected: ${Math.round(rate * 100)}% — possible soft ban`);
                 }
             },
         });
@@ -418,6 +428,24 @@ class AntiBan {
             const multiplier = Math.min(5, 1 / activityFactor);
             delay = Math.floor(delay * multiplier);
         }
+        // Per-contact risk multiplier — cold contacts need longer delays
+        // Only apply when contact graph is enabled, otherwise all contacts appear as 'stranger'
+        if (this.contactGraphWarmer['config']?.enabled) {
+            const contactState = this.contactGraphWarmer.getContactState(recipient);
+            const coldMultiplier = {
+                stranger: 2.5,
+                handshake_sent: 1.8,
+                handshake_complete: 1.3,
+                known: 1.0,
+            };
+            const contactRiskMult = coldMultiplier[contactState] ?? 1.0;
+            if (contactRiskMult > 1.0) {
+                delay = Math.floor(delay * contactRiskMult);
+                if (this.logging && contactRiskMult >= 2.0) {
+                    console.log(`[baileys-antiban] ⚠️  Cold contact ${recipient} — ${contactState}, delay ×${contactRiskMult}`);
+                }
+            }
+        }
         // Roll for distraction pause
         const distractionCheck = this.presenceChoreographer.shouldPauseForDistraction();
         if (distractionCheck.pause) {
@@ -445,11 +473,14 @@ class AntiBan {
      * Record a successfully sent message.
      * Call this AFTER every successful sendMessage().
      */
-    afterSend(recipient, content) {
+    afterSend(recipient, content, msgId) {
         this.rateLimiter.record(recipient, content);
         this.warmUp.record();
         this.replyRatioGuard.recordSent(recipient);
         this.stats.messagesAllowed++;
+        if (msgId) {
+            this.deliveryTracker.onMessageSent(msgId);
+        }
         this.persistStateDebounced();
     }
     /**
@@ -486,6 +517,13 @@ class AntiBan {
         return this.replyRatioGuard.suggestReply(jid, msgText);
     }
     /**
+     * Record a delivery receipt (status 3 = DELIVERY_ACK, status 4 = READ).
+     * Call from messages.update handler when delivery status is received.
+     */
+    onDeliveryReceipt(msgId) {
+        this.deliveryTracker.onDeliveryReceipt(msgId);
+    }
+    /**
      * Get the resolved configuration
      */
     getConfig() {
@@ -501,6 +539,7 @@ class AntiBan {
             warmUp: this.warmUp.getStatus(),
             rateLimiter: this.rateLimiter.getStats(),
             banRecovery: this.banRecovery.getStatus(),
+            deliveryTracker: this.deliveryTracker.getStats(),
         };
         // Only include new stats if enabled
         if (this.replyRatioGuard['config']?.enabled) {

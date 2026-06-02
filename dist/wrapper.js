@@ -119,6 +119,13 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                     }
                     // Retry tracking
                     antiban.retryTracker.onMessageUpdate(update);
+                    // Delivery receipt tracking
+                    const status = update?.update?.status;
+                    const msgId = update?.key?.id;
+                    // status 3 = DELIVERY_ACK (double tick), status 4 = READ
+                    if (msgId && (status === 3 || status === 4)) {
+                        antiban.onDeliveryReceipt(msgId);
+                    }
                 }
                 // LID canonicalizer learning
                 antiban.jidCanonicalizer?.onMessageUpdate(updates);
@@ -200,6 +207,13 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                 }
                 // Retry tracking
                 antiban.retryTracker.onMessageUpdate(update);
+                // Delivery receipt tracking
+                const status = update?.update?.status;
+                const msgId = update?.key?.id;
+                // status 3 = DELIVERY_ACK (double tick), status 4 = READ
+                if (msgId && (status === 3 || status === 4)) {
+                    antiban.onDeliveryReceipt(msgId);
+                }
             }
             // LID canonicalizer learning
             antiban.jidCanonicalizer?.onMessageUpdate(updates);
@@ -298,11 +312,13 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                     // Normal send
                     result = await originalSendMessage(canonicalJid, content, options);
                 }
-                antiban.afterSend(canonicalJid, text);
+                // Pass msgId to afterSend for delivery tracking
+                const msgId = result?.key?.id;
+                antiban.afterSend(canonicalJid, text, msgId);
                 antiban.timelock.registerKnownChat(canonicalJid);
                 // Clear retry tracking on successful send
-                if (result?.key?.id) {
-                    antiban.retryTracker.clear(result.key.id);
+                if (msgId) {
+                    antiban.retryTracker.clear(msgId);
                 }
                 return result;
             }

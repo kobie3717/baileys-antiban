@@ -175,6 +175,9 @@ export {
   type RecoveryStatus,
 } from './banRecoveryOrchestrator.js';
 
+// v4.3 new modules
+export { DeliveryTracker, type DeliveryTrackerConfig, type DeliveryTrackerStats } from './deliveryTracker.js';
+
 // Observability
 export {
   createConsoleLogger,

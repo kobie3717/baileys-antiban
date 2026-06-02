@@ -27,6 +27,7 @@ import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerSta
 import { SessionHealthMonitor, type SessionHealthStats } from './sessionStability.js';
 import { BanRecoveryOrchestrator, type RecoveryStatus } from './banRecoveryOrchestrator.js';
 import { type AntiBanInput, type ResolvedConfig } from './presets.js';
+import { type DeliveryTrackerStats } from './deliveryTracker.js';
 export interface AntiBanConfigLegacy {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
@@ -72,6 +73,7 @@ export interface AntiBanStats {
     jidCanonicalizer?: JidCanonicalizerStats | null;
     sessionStability?: SessionHealthStats | null;
     banRecovery?: RecoveryStatus | null;
+    deliveryTracker: DeliveryTrackerStats;
 }
 export declare class AntiBan {
     private rateLimiter;
@@ -87,6 +89,7 @@ export declare class AntiBan {
     private jidCanonicalizerModule;
     private sessionStabilityMonitor;
     private banRecovery;
+    private deliveryTracker;
     private stateManager;
     private resolvedConfig;
     private logging;
@@ -101,7 +104,7 @@ export declare class AntiBan {
      * Record a successfully sent message.
      * Call this AFTER every successful sendMessage().
      */
-    afterSend(recipient: string, content: string): void;
+    afterSend(recipient: string, content: string, msgId?: string): void;
     /**
      * Record a failed message send
      */
@@ -122,6 +125,11 @@ export declare class AntiBan {
         shouldReply: boolean;
         suggestedText?: string;
     };
+    /**
+     * Record a delivery receipt (status 3 = DELIVERY_ACK, status 4 = READ).
+     * Call from messages.update handler when delivery status is received.
+     */
+    onDeliveryReceipt(msgId: string): void;
     /**
      * Get the resolved configuration
      */

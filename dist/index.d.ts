@@ -41,4 +41,5 @@ export { getStealthSocketConfig, rampPresenceAfterConnect, STEALTH_BROWSER_POOL,
 export { GroupOperationGuard, classifyGroupOpError, extractPrivacyBlock, GROUP_OP_ERRORS, type GroupOperation, type GroupOpLimit, type GroupOperationGuardConfig, type GroupOpResult, type GroupOperationGuardStats, type GroupOpErrorCode, type PrivacyBlockResult, } from './groupOperationGuard.js';
 export { LegitimacySignalInjector, type LegitimacySignalInjectorConfig, type LegitimacySignalStats, type TypoResult, type TypingPause, } from './legitimacySignalInjector.js';
 export { BanRecoveryOrchestrator, type BanEventType, type RecoveryPhase, type RecoveryPlan, type BanRecoveryConfig, type RecoveryState, type RecoveryStatus, } from './banRecoveryOrchestrator.js';
+export { DeliveryTracker, type DeliveryTrackerConfig, type DeliveryTrackerStats } from './deliveryTracker.js';
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, type AntiBanLogger, type PeriodicExporterConfig, type PeriodicExporterHandle, } from './observability.js';

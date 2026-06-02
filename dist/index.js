@@ -59,5 +59,7 @@ export { GroupOperationGuard, classifyGroupOpError, extractPrivacyBlock, GROUP_O
 export { LegitimacySignalInjector, } from './legitimacySignalInjector.js';
 // v4.2 new modules
 export { BanRecoveryOrchestrator, } from './banRecoveryOrchestrator.js';
+// v4.3 new modules
+export { DeliveryTracker } from './deliveryTracker.js';
 // Observability
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, } from './observability.js';
