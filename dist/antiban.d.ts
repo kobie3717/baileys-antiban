@@ -174,6 +174,7 @@ export declare class AntiBan {
      * Reset everything (use after a ban period)
      */
     reset(): void;
+    private runAdaptiveCheck;
     private persistStateDebounced;
     private persistStateImmediate;
     /**

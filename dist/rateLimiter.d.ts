@@ -38,9 +38,11 @@ export interface RateLimiterStats {
         perDay: number;
     };
     knownChats: number;
+    currentFactor: number;
 }
 export declare class RateLimiter {
     private config;
+    private originalConfig;
     private messages;
     private identicalCount;
     private knownChats;
@@ -61,6 +63,16 @@ export declare class RateLimiter {
      * Get current usage stats
      */
     getStats(): RateLimiterStats;
+    /**
+     * Dynamically scale rate limits by a factor (0.1–1.0).
+     * factor=1.0 = original config limits (full speed)
+     * factor=0.5 = 50% of configured limits
+     * Floors: perMinute >= 1, perHour >= 5, perDay >= 20
+     * Also scales minDelayMs/maxDelayMs inversely (slower sends when throttled).
+     */
+    adaptLimits(factor: number): void;
+    /** Return current effective factor (0.1–1.0) */
+    getCurrentFactor(): number;
     /** Get the set of known chat JIDs (for state persistence) */
     getKnownChats(): Set<string>;
     /** Restore known chats from persisted state */

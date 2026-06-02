@@ -481,6 +481,7 @@ class AntiBan {
         if (msgId) {
             this.deliveryTracker.onMessageSent(msgId);
         }
+        this.runAdaptiveCheck();
         this.persistStateDebounced();
     }
     /**
@@ -506,6 +507,7 @@ class AntiBan {
     onReconnect() {
         this.health.recordReconnect();
         this.reconnectThrottleModule.onReconnect();
+        this.rateLimiter.adaptLimits(1.0);
     }
     /**
      * Handle incoming message — record in reply ratio + contact graph.
@@ -647,6 +649,35 @@ class AntiBan {
         this.stats = { messagesAllowed: 0, messagesBlocked: 0, totalDelayMs: 0 };
         if (this.logging) {
             console.log('[baileys-antiban] 🔄 Reset — starting fresh warm-up');
+        }
+    }
+    runAdaptiveCheck() {
+        const delivery = this.deliveryTracker.getStats();
+        // Need min sample to be meaningful
+        if (delivery.deliveryRate === null)
+            return;
+        const rate = delivery.deliveryRate;
+        let targetFactor;
+        if (rate >= 0.85) {
+            targetFactor = 1.0; // Excellent — full speed
+        }
+        else if (rate >= 0.70) {
+            targetFactor = 0.75; // Good — slight reduction
+        }
+        else if (rate >= 0.55) {
+            targetFactor = 0.50; // Poor — halve throughput
+        }
+        else {
+            targetFactor = 0.25; // Bad — severe throttle (soft ban likely)
+        }
+        const current = this.rateLimiter.getCurrentFactor();
+        // Only log + adjust when factor changes meaningfully (>5% delta)
+        if (Math.abs(targetFactor - current) > 0.05) {
+            if (this.logging) {
+                const dir = targetFactor > current ? '📈' : '📉';
+                console.log(`[baileys-antiban] ${dir} Adaptive rate: delivery=${(rate * 100).toFixed(0)}% → factor ${current.toFixed(2)}→${targetFactor.toFixed(2)}`);
+            }
+            this.rateLimiter.adaptLimits(targetFactor);
         }
     }
     persistStateDebounced() {

@@ -30,6 +30,7 @@ const DEFAULT_CONFIG = {
 };
 export class RateLimiter {
     config;
+    originalConfig;
     messages = [];
     identicalCount = new Map();
     knownChats = new Set();
@@ -37,6 +38,7 @@ export class RateLimiter {
     lastMessageTime = 0;
     constructor(config = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
+        this.originalConfig = { ...this.config };
     }
     /**
      * Calculate delay before next message can be sent.
@@ -152,7 +154,29 @@ export class RateLimiter {
                 perDay: this.config.maxPerDay,
             },
             knownChats: this.knownChats.size,
+            currentFactor: this.getCurrentFactor(),
         };
+    }
+    /**
+     * Dynamically scale rate limits by a factor (0.1–1.0).
+     * factor=1.0 = original config limits (full speed)
+     * factor=0.5 = 50% of configured limits
+     * Floors: perMinute >= 1, perHour >= 5, perDay >= 20
+     * Also scales minDelayMs/maxDelayMs inversely (slower sends when throttled).
+     */
+    adaptLimits(factor) {
+        const f = Math.max(0.1, Math.min(1.0, factor));
+        this.config.maxPerMinute = Math.max(1, Math.floor(this.originalConfig.maxPerMinute * f));
+        this.config.maxPerHour = Math.max(5, Math.floor(this.originalConfig.maxPerHour * f));
+        this.config.maxPerDay = Math.max(20, Math.floor(this.originalConfig.maxPerDay * f));
+        // Inverse: lower factor = longer delays (more human when throttled)
+        const delayScale = 1 + (1 - f) * 2; // f=1.0→1x, f=0.5→2x, f=0.1→3.8x
+        this.config.minDelayMs = Math.floor(this.originalConfig.minDelayMs * delayScale);
+        this.config.maxDelayMs = Math.floor(this.originalConfig.maxDelayMs * delayScale);
+    }
+    /** Return current effective factor (0.1–1.0) */
+    getCurrentFactor() {
+        return this.config.maxPerMinute / this.originalConfig.maxPerMinute;
     }
     /** Get the set of known chat JIDs (for state persistence) */
     getKnownChats() {
