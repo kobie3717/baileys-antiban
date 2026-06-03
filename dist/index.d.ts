@@ -43,4 +43,7 @@ export { LegitimacySignalInjector, type LegitimacySignalInjectorConfig, type Leg
 export { BanRecoveryOrchestrator, type BanEventType, type RecoveryPhase, type RecoveryPlan, type BanRecoveryConfig, type RecoveryState, type RecoveryStatus, } from './banRecoveryOrchestrator.js';
 export { DeliveryTracker, type DeliveryTrackerConfig, type DeliveryTrackerStats } from './deliveryTracker.js';
 export { InstanceCoordinator, type InstanceCoordinatorConfig, type InstanceCoordinatorStats } from './instanceCoordinator.js';
+export { JidCircuitBreaker, createJidCircuitBreaker, type JidCircuitBreakerConfig, type CircuitState, type JidCircuitBreakerStats } from './jidCircuitBreaker.js';
+export { createFleetEventStore, createMySQLEventStoreBackend, createInMemoryEventStoreBackend, type FleetEventType, type FleetEvent, type FleetEventStoreConfig, type FleetEventStoreHandle, type EventStoreBackend } from './fleetEventStore.js';
+export { HumanEntropyService, createHumanEntropyService, type HumanEntropyConfig, type HumanEntropyStats } from './humanEntropy.js';
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, type AntiBanLogger, type PeriodicExporterConfig, type PeriodicExporterHandle, } from './observability.js';

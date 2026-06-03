@@ -63,5 +63,9 @@ export { BanRecoveryOrchestrator, } from './banRecoveryOrchestrator.js';
 export { DeliveryTracker } from './deliveryTracker.js';
 // v4.4 new modules
 export { InstanceCoordinator } from './instanceCoordinator.js';
+// v4.7 new modules
+export { JidCircuitBreaker, createJidCircuitBreaker } from './jidCircuitBreaker.js';
+export { createFleetEventStore, createMySQLEventStoreBackend, createInMemoryEventStoreBackend } from './fleetEventStore.js';
+export { HumanEntropyService, createHumanEntropyService } from './humanEntropy.js';
 // Observability
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, } from './observability.js';
