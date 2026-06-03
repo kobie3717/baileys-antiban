@@ -10,7 +10,7 @@
 
 > Rate limiting with Gaussian jitter, 7-day warmup, session health monitoring, LID resolver, disconnect classification, contact graph enforcement, device fingerprinting, group operation guards, recovery orchestration, cross-instance coordination — all in one `npm install`. Works with [Baileys](https://github.com/WhiskeySockets/Baileys) and [@oxidezap/baileyrs](https://github.com/oxidezap/baileyrs) (Rust/WASM).
 
-> **New in v4.6:** Cross-instance coordination, adaptive rate limiting, delivery tracking, per-contact risk delays, BanRecoveryOrchestrator, GroupOperationGuard, LegitimacySignalInjector — all auto-wired.
+> **New in v4.7:** HumanEntropyService — background human-like activity (typing indicators, delayed read receipts, presence cycles) to prevent "too perfect bot" detection. Works with WaSP and any session manager, no socket access needed.
 
 ## Why Trust This Package
 
@@ -29,7 +29,7 @@ If you can't read the code yourself, lean on these signals: signed releases, pub
 
 ## v4.x New Features — Production-Grade Ban Prevention
 
-v4.0–v4.6 ship six major anti-ban modules. All are **auto-wired** by default via `wrapSocket()` or `wrapSocketWithFingerprint()`.
+v4.0–v4.7 ship seven major anti-ban modules. All are **auto-wired** by default via `wrapSocket()` or `wrapSocketWithFingerprint()`.
 
 ### v4.0 — GroupOperationGuard
 
@@ -143,6 +143,48 @@ const sock = wrapSocket(makeWASocket({ ... }), {
 ```
 
 All instances share 20/min IP-level budget. Atomic writes via rename-swap.
+
+### v4.7 — HumanEntropyService
+
+Background noise generator that makes a WA session indistinguishable from a real human user during idle periods. Runs independently of your message flow — no socket access required, works with WaSP or any session manager.
+
+**The problem it solves:** WhatsApp's ML flags accounts with "too perfect" patterns — instant read receipts, zero typing activity, always-on presence. A listen-only bot that never idles looks like a bot.
+
+**What it does every 2-6 hours (randomized):**
+- Sends typing indicator to a recent contact for 3-8 seconds, then stops (mimics "started typing, changed mind")
+- Marks a received message as read with 10-60 min delay (mimics "opened notification, read later")
+- Toggles own presence available → unavailable over 30-120s (mimics "checked phone, put it down")
+
+**Safety:** Only contacts people who already messaged you first. Never cold-contacts strangers. All errors caught silently.
+
+```typescript
+import { createHumanEntropyService } from 'baileys-antiban';
+
+// Works with WaSP (no direct socket access needed)
+const entropy = createHumanEntropyService(wasp, sessionId, {
+  enabled: true,
+  minIntervalMs: 2 * 60 * 60 * 1000, // 2 hours
+  maxIntervalMs: 6 * 60 * 60 * 1000, // 6 hours
+});
+
+entropy.start(); // runs in background
+entropy.stop();  // call on shutdown
+
+// Or with direct Baileys socket
+import { HumanEntropyService } from 'baileys-antiban';
+const svc = new HumanEntropyService(socket, { enabled: true });
+svc.start();
+```
+
+**Tracking recent contacts:** Feed incoming messages so the service knows who to interact with:
+
+```typescript
+sock.ev.on('messages.upsert', ({ messages }) => {
+  messages.forEach(m => entropy.addRecentContact(m.key.remoteJid, m.key));
+});
+```
+
+Stats: `entropy.getStats()` returns `{ typingActions, readActions, presenceActions, cycles }`.
 
 ---
 
