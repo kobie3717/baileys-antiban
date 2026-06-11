@@ -33,6 +33,10 @@ export interface WarmUpState {
     dailyCounts: number[];
     /** Whether warm-up is complete */
     graduated: boolean;
+    /** Current day's send count (for crash recovery) */
+    todaySentCount?: number;
+    /** Date (YYYY-MM-DD) of todaySentCount (for validation) */
+    todayDate?: string;
 }
 export interface WarmUpStatus {
     phase: 'warming' | 'graduated';
@@ -66,6 +70,10 @@ export declare class WarmUp {
      * Export state for persistence
      */
     exportState(): WarmUpState;
+    /**
+     * Import state from persistence
+     */
+    importState(state: WarmUpState): void;
     /**
      * Reset warm-up (e.g., after detected ban risk)
      */

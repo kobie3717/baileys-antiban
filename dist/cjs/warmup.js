@@ -85,7 +85,34 @@ class WarmUp {
      * Export state for persistence
      */
     exportState() {
-        return { ...this.state };
+        const day = this.getCurrentDay();
+        const todaySent = this.state.dailyCounts[day] || 0;
+        const todayDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        return {
+            ...this.state,
+            todaySentCount: todaySent,
+            todayDate,
+        };
+    }
+    /**
+     * Import state from persistence
+     */
+    importState(state) {
+        this.state = { ...state };
+        // BUG FIX 1: Restore today's send count from persisted state
+        // If todayDate matches current date, restore the count to prevent
+        // post-crash burst (issue: warmup day counter survives but send history lost)
+        if (state.todayDate && state.todaySentCount !== undefined) {
+            const todayDate = new Date().toISOString().split('T')[0];
+            if (state.todayDate === todayDate) {
+                const day = this.getCurrentDay();
+                // Restore the persisted count if higher than current
+                while (this.state.dailyCounts.length <= day) {
+                    this.state.dailyCounts.push(0);
+                }
+                this.state.dailyCounts[day] = Math.max(this.state.dailyCounts[day] || 0, state.todaySentCount);
+            }
+        }
     }
     /**
      * Reset warm-up (e.g., after detected ban risk)

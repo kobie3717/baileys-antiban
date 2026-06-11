@@ -186,6 +186,42 @@ export class JidCircuitBreaker {
       total: this.circuits.size,
     };
   }
+
+  /**
+   * BUG FIX 2: Export all circuit states for persistence
+   * Returns array of { jid, state, failures, openedAt, halfOpenProbeUsed }
+   */
+  exportState(): Array<{ jid: string; state: CircuitState; failures: number; openedAt: number | null; halfOpenProbeUsed: boolean }> {
+    const result: Array<{ jid: string; state: CircuitState; failures: number; openedAt: number | null; halfOpenProbeUsed: boolean }> = [];
+    this.circuits.forEach((entry, jid) => {
+      // Only export circuits that are open or half-open (non-trivial state)
+      if (entry.state !== 'closed' || entry.failures > 0) {
+        result.push({
+          jid,
+          state: entry.state,
+          failures: entry.failures,
+          openedAt: entry.openedAt,
+          halfOpenProbeUsed: entry.halfOpenProbeUsed,
+        });
+      }
+    });
+    return result;
+  }
+
+  /**
+   * BUG FIX 2: Import circuit states from persistence
+   * Restores open/half-open circuits so blocked JIDs remain blocked after restart
+   */
+  importState(states: Array<{ jid: string; state: CircuitState; failures: number; openedAt: number | null; halfOpenProbeUsed?: boolean }>): void {
+    for (const item of states) {
+      this.circuits.set(item.jid, {
+        state: item.state,
+        failures: item.failures,
+        openedAt: item.openedAt,
+        halfOpenProbeUsed: item.halfOpenProbeUsed ?? false,
+      });
+    }
+  }
 }
 
 export function createJidCircuitBreaker(config?: JidCircuitBreakerConfig): JidCircuitBreaker {

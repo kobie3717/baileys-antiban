@@ -194,4 +194,30 @@ export class InstanceCoordinator {
       // Fail silently — don't throw, this is best-effort coordination
     }
   }
+
+  /**
+   * BUG FIX 3: Sync local rate limiter with shared pool after reconnect
+   * Reads shared pool timestamps and injects them into the local limiter's sliding window.
+   * This prevents the double-spend window where the limiter thinks it has full budget
+   * post-reconnect but the shared pool already shows most slots used.
+   */
+  syncLocalLimiter(rateLimiter: { injectTimestamps: (timestamps: number[]) => void }): void {
+    try {
+      const state = this.readState();
+      const now = Date.now();
+
+      // Filter to last 24 hours (rate limiter's cleanup window)
+      const recentTimestamps = state.sends.filter(ts => now - ts < 86400000);
+
+      // Inject into local rate limiter
+      rateLimiter.injectTimestamps(recentTimestamps);
+
+      if (recentTimestamps.length > 0) {
+        console.log(`[baileys-antiban] instanceCoordinator: Synced ${recentTimestamps.length} shared pool timestamps to local limiter after reconnect`);
+      }
+    } catch (err) {
+      console.warn('[baileys-antiban] instanceCoordinator: Failed to sync local limiter:', err);
+      // Fail silently — this is best-effort sync
+    }
+  }
 }

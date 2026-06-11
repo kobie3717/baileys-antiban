@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.10.0] - 2026-06-11
+
+### Added
+- `ReputationVoucher` — dedicated sacrificial warmup accounts that create real bidirectional conversation history for new numbers before they contact customers. Max 5 vouches/week per vouching account, 3-strike suspension system, warmup credit calculation (0-3 days).
+
+## [4.9.0] - 2026-06-11
+
+### Added
+- `TopologyThrottler` — graph-expansion enforcement replacing timing mimicry. Limits new contacts/hour/day, enforces minimum reply ratio, detects source group hotspots (mass-DM patterns).
+- `ContactRiskScore` — classifies each send target (first contact, replied before, mutual groups) with a 0-100 risk score and abort/delay/send recommendation.
+
+## [4.8.0] - 2026-06-11
+
+### Added
+- `MessageTypeRegistry` — register message types upfront with priority (critical/normal/bulk), provenance requirements, and per-pool rate limits. Tracks read/reply/block rates per type, emits warnings only (never autopilot throttles). Critical types require provenance (e.g. `user_action_id`).
+- `exportState()` / `importState()` on `AntiBan` class — unified single-call state serialization for Redis failover. Covers warmup, health, rate limits, circuit breakers, timelockGuard, message registry, engagement scores, reputation voucher. CRDT-safe (increment-only counters, never overwrites higher values).
+
+### Fixed
+- Warmup day count now persisted with current date — survives process crashes without resetting to day 1
+- `JidCircuitBreaker` state (blocked JIDs, failure counts, openedAt) now exported/imported — no longer forgets blocked recipients on restart
+- `DeafSessionDetector` reconnect no longer races with `InstanceCoordinator` — local rate limiter backfilled from shared pool on reconnect, preventing double-spend of tokens
+
 ## [3.8.11] - 2026-05-19
 
 ### Security

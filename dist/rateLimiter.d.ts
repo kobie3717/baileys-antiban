@@ -77,6 +77,13 @@ export declare class RateLimiter {
     getKnownChats(): Set<string>;
     /** Restore known chats from persisted state */
     restoreKnownChats(chats: string[]): void;
+    /**
+     * BUG FIX 3: Inject historical timestamps into the sliding window
+     * Used by InstanceCoordinator to sync local limiter with shared pool after reconnect.
+     * This prevents the double-spend window where local limiter thinks it has full budget
+     * but the shared pool already shows most slots used.
+     */
+    injectTimestamps(timestamps: number[]): void;
     private cleanup;
     /** Random delay between min and max (gaussian-ish distribution) */
     private jitter;

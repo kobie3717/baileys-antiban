@@ -186,6 +186,14 @@ export { JidCircuitBreaker, createJidCircuitBreaker, type JidCircuitBreakerConfi
 export { createFleetEventStore, createMySQLEventStoreBackend, createInMemoryEventStoreBackend, type FleetEventType, type FleetEvent, type FleetEventStoreConfig, type FleetEventStoreHandle, type EventStoreBackend } from './fleetEventStore.js';
 export { HumanEntropyService, createHumanEntropyService, type HumanEntropyConfig, type HumanEntropyStats } from './humanEntropy.js';
 
+// v4.8 new modules
+export { MessageTypeRegistry, type MessageTypeDefinition, type MessageProvenance, type MessageTypeStats, type MessageTypeWarning, type MessageTypeRegistryState } from './messageTypeRegistry.js';
+export { exportAntibanState, importAntibanState, type AntibanSnapshot, type RateLimiterState, type TimelockGuardState, type CircuitState as CircuitStateExport, type DisconnectEvent } from './stateExport.js';
+export { TopologyThrottler, type TopologyThrottlerConfig, type ContactRisk, type ContactRiskAssessment, type ContactRiskConfig, type TopologyThrottlerState } from './topologyThrottler.js';
+
+// v4.9 new modules
+export { ReputationVoucher, type ReputationVoucherConfig, type VouchTarget, type VouchingAccount, type VouchConversation, type ReputationVoucherState } from './reputationVoucher.js';
+
 // Observability
 export {
   createConsoleLogger,

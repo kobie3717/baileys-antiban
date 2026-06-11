@@ -22,6 +22,7 @@ import { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './
 import { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats } from './contactGraph.js';
 import { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
 import { RetryReasonTracker, type RetryTrackerConfig, type RetryStats } from './retryTracker.js';
+import { TopologyThrottler, type TopologyThrottlerConfig } from './topologyThrottler.js';
 import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
@@ -32,6 +33,10 @@ import { StateManager, type PersistedState } from './persist.js';
 import { shouldUseGroupProfile, applyGroupMultiplier } from './profiles.js';
 import { DeliveryTracker, type DeliveryTrackerStats } from './deliveryTracker.js';
 import { InstanceCoordinator, type InstanceCoordinatorStats } from './instanceCoordinator.js';
+import { MessageTypeRegistry } from './messageTypeRegistry.js';
+import { exportAntibanState, importAntibanState, type AntibanSnapshot } from './stateExport.js';
+import { ReputationVoucher } from './reputationVoucher.js';
+import { JidCircuitBreaker } from './jidCircuitBreaker.js';
 
 // Legacy v2 nested config shape — kept for compat shim
 export interface AntiBanConfigLegacy {
@@ -44,6 +49,7 @@ export interface AntiBanConfigLegacy {
   presence?: Partial<PresenceChoreographerConfig>;
   retryTracker?: Partial<RetryTrackerConfig>;
   reconnectThrottle?: Partial<ReconnectThrottleConfig>;
+  topologyThrottler?: Partial<TopologyThrottlerConfig>;
   lidResolver?: LidResolverConfig;
   jidCanonicalizer?: JidCanonicalizerConfig;
   sessionStability?: {
@@ -124,12 +130,20 @@ export interface AntiBanStats {
   presence?: PresenceChoreographerStats;
   retryTracker?: RetryStats | null;
   reconnectThrottle?: ReconnectThrottleStats | null;
+  topologyThrottler?: {
+    newContactsThisHour: number;
+    newContactsToday: number;
+    replyRatio: number | null;
+    blockedRatio: number | null;
+    hotspots: Array<{ sourceGroup: string; count: number }>;
+  } | null;
   lidResolver?: LidResolverStats | null;
   jidCanonicalizer?: JidCanonicalizerStats | null;
   sessionStability?: SessionHealthStats | null;
   banRecovery?: RecoveryStatus | null;
   deliveryTracker: DeliveryTrackerStats;
   instanceCoordinator?: InstanceCoordinatorStats | null;
+  messageRegistry?: { typeCount: number; warningCount: number } | null;
 }
 
 export class AntiBan {
@@ -142,15 +156,22 @@ export class AntiBan {
   private presenceChoreographer: PresenceChoreographer;
   private retryTrackerModule: RetryReasonTracker;
   private reconnectThrottleModule: PostReconnectThrottle;
+  private topologyThrottlerModule: TopologyThrottler | null = null;
   private lidResolverModule: LidResolver | null = null;
   private jidCanonicalizerModule: JidCanonicalizer | null = null;
   private sessionStabilityMonitor: SessionHealthMonitor | null = null;
   private banRecovery: BanRecoveryOrchestrator;
   private deliveryTracker: DeliveryTracker;
   private instanceCoordinator: InstanceCoordinator | null = null;
+  private messageTypeRegistry: MessageTypeRegistry | null = null;
+  private jidCircuitBreakerModule: JidCircuitBreaker | null = null;
   private stateManager: StateManager | null = null;
   private resolvedConfig: ResolvedConfig;
   private logging: boolean;
+  private hasDisconnected: boolean = false; // BUG FIX 3: Track if we've ever disconnected
+
+  /** Optional reputation voucher (standalone — caller manages separate voucher sockets) */
+  public reputationVoucher?: ReputationVoucher;
 
   private stats = {
     messagesAllowed: 0,
@@ -296,6 +317,14 @@ export class AntiBan {
       baselineRatePerMinute: () => this.rateLimiter.getStats().limits.perMinute,
     });
 
+    // Initialize topology throttler if configured
+    if (legacyPassthrough?.topologyThrottler) {
+      this.topologyThrottlerModule = new TopologyThrottler(legacyPassthrough.topologyThrottler);
+      if (this.logging) {
+        console.log(`[baileys-antiban] 🌐 Topology throttler enabled — max ${legacyPassthrough.topologyThrottler.maxNewContactsPerHour || 5}/hr, ${legacyPassthrough.topologyThrottler.maxNewContactsPerDay || 20}/day new contacts`);
+      }
+    }
+
     // Initialize LID resolver and canonicalizer if configured
     // If jidCanonicalizer is enabled but no resolver provided, create standalone resolver
     if (legacyPassthrough?.jidCanonicalizer?.enabled) {
@@ -348,6 +377,28 @@ export class AntiBan {
       });
       if (this.logging) {
         console.log(`[baileys-antiban] 🌐 Instance coordination enabled: ${cfg.instanceCoordinator}`);
+      }
+    }
+
+    // Initialize message type registry if configured
+    if ((cfg as any).messageTypeRegistry) {
+      this.messageTypeRegistry = new MessageTypeRegistry();
+      if (this.logging) {
+        console.log(`[baileys-antiban] 📝 Message type registry enabled`);
+      }
+    }
+
+    // Initialize JID circuit breaker if configured (BUG FIX 2)
+    if ((cfg as any).circuitBreaker) {
+      const cbConfig = typeof (cfg as any).circuitBreaker === 'object'
+        ? (cfg as any).circuitBreaker
+        : {};
+      this.jidCircuitBreakerModule = new JidCircuitBreaker({
+        ...cbConfig,
+        logger: this.logging ? { warn: console.warn.bind(console), info: console.info.bind(console) } : undefined,
+      });
+      if (this.logging) {
+        console.log(`[baileys-antiban] 🔌 JID circuit breaker enabled`);
       }
     }
   }
@@ -429,6 +480,51 @@ export class AntiBan {
         reason: `Contact graph: ${contactGraphDecision.reason}`,
         health: healthStatus,
       };
+    }
+
+    // Topology throttler check — only applies to DMs to new/unknown contacts
+    if (this.topologyThrottlerModule && !this.isGroupJid(recipient)) {
+      const knownChats = this.rateLimiter.getKnownChats();
+      const isNewContact = !knownChats.has(recipient);
+
+      if (isNewContact) {
+        // Check if we can send to new contact based on topology limits
+        const topologyDecision = this.topologyThrottlerModule.canSendToNewContact();
+        if (!topologyDecision.allowed) {
+          this.stats.messagesBlocked++;
+          if (this.logging) {
+            console.log(`[baileys-antiban] 🌐 BLOCKED — topology: ${topologyDecision.reason}`);
+          }
+          return {
+            allowed: false,
+            delayMs: topologyDecision.retryAfterMs || 0,
+            reason: `Topology: ${topologyDecision.reason}`,
+            health: healthStatus,
+          };
+        }
+
+        // Assess contact risk
+        const riskAssessment = this.topologyThrottlerModule.assessContact(recipient, {
+          messageType: 'dm',
+          hasReplied: false,
+          knownGroups: [],
+        });
+
+        if (riskAssessment.recommendation === 'abort') {
+          this.stats.messagesBlocked++;
+          if (this.logging) {
+            console.log(`[baileys-antiban] ⛔ BLOCKED — contact risk ${riskAssessment.risk} (score ${riskAssessment.score}): ${riskAssessment.reasons.join(', ')}`);
+          }
+          return {
+            allowed: false,
+            delayMs: 0,
+            reason: `Contact risk too high: ${riskAssessment.reasons.join(', ')}`,
+            health: healthStatus,
+          };
+        }
+
+        // If delay recommended, we'll add it to the total delay later
+      }
     }
 
     // Reply ratio check
@@ -545,6 +641,27 @@ export class AntiBan {
       }
     }
 
+    // Topology throttler recommended delay
+    if (this.topologyThrottlerModule && !this.isGroupJid(recipient)) {
+      const knownChats = this.rateLimiter.getKnownChats();
+      const isNewContact = !knownChats.has(recipient);
+
+      if (isNewContact) {
+        const riskAssessment = this.topologyThrottlerModule.assessContact(recipient, {
+          messageType: 'dm',
+          hasReplied: false,
+          knownGroups: [],
+        });
+
+        if (riskAssessment.recommendation === 'delay' && riskAssessment.suggestedDelayMs) {
+          delay += riskAssessment.suggestedDelayMs;
+          if (this.logging) {
+            console.log(`[baileys-antiban] ⚠️  Topology risk ${riskAssessment.risk} — adding ${Math.floor(riskAssessment.suggestedDelayMs / 60000)}min delay`);
+          }
+        }
+      }
+    }
+
     // Roll for distraction pause
     const distractionCheck = this.presenceChoreographer.shouldPauseForDistraction();
     if (distractionCheck.pause) {
@@ -579,6 +696,7 @@ export class AntiBan {
     this.rateLimiter.record(recipient, content);
     this.warmUp.record();
     this.replyRatioGuard.recordSent(recipient);
+    this.topologyThrottlerModule?.recordSent(recipient);
     this.stats.messagesAllowed++;
     if (msgId) {
       this.deliveryTracker.onMessageSent(msgId);
@@ -598,6 +716,7 @@ export class AntiBan {
    * Record a disconnection (call from connection.update handler)
    */
   onDisconnect(reason: string | number): void {
+    this.hasDisconnected = true; // BUG FIX 3: Mark that we've disconnected
     this.health.recordDisconnect(reason);
     this.reconnectThrottleModule.onDisconnect();
     const reasonStr = String(reason);
@@ -612,6 +731,16 @@ export class AntiBan {
   onReconnect(): void {
     this.health.recordReconnect();
     this.reconnectThrottleModule.onReconnect();
+
+    // BUG FIX 3: Sync local rate limiter with shared pool after reconnect
+    // This prevents the double-spend window where DeafSessionDetector triggers
+    // reconnect → in-memory rate limiter resets to 0 → thinks it has full budget
+    // → sends 20 messages → THEN reads shared file and discovers 18/20 already used
+    // Only sync if this is a TRUE reconnect (after disconnect), not first connect
+    if (this.hasDisconnected && this.instanceCoordinator) {
+      this.instanceCoordinator.syncLocalLimiter(this.rateLimiter);
+    }
+
     this.rateLimiter.adaptLimits(1.0);
   }
 
@@ -622,6 +751,7 @@ export class AntiBan {
   onIncomingMessage(jid: string, msgText?: string): { shouldReply: boolean; suggestedText?: string } {
     this.replyRatioGuard.recordReceived(jid);
     this.contactGraphWarmer.onIncomingMessage(jid);
+    this.topologyThrottlerModule?.recordReplied(jid);
 
     return this.replyRatioGuard.suggestReply(jid, msgText);
   }
@@ -670,6 +800,9 @@ export class AntiBan {
     if (this.reconnectThrottleModule['config']?.enabled) {
       stats.reconnectThrottle = this.reconnectThrottleModule.getStats();
     }
+    if (this.topologyThrottlerModule) {
+      stats.topologyThrottler = this.topologyThrottlerModule.getTopologyStats();
+    }
     if (this.lidResolverModule) {
       stats.lidResolver = this.lidResolverModule.getStats();
     }
@@ -681,6 +814,13 @@ export class AntiBan {
     }
     if (this.instanceCoordinator) {
       stats.instanceCoordinator = this.instanceCoordinator.getStats();
+    }
+    if (this.messageTypeRegistry) {
+      const warnings = this.messageTypeRegistry.getWarnings();
+      stats.messageRegistry = {
+        typeCount: Array.from((this.messageTypeRegistry as any).types.keys()).length,
+        warningCount: warnings.length,
+      };
     }
 
     return stats;
@@ -716,6 +856,16 @@ export class AntiBan {
     return this.reconnectThrottleModule;
   }
 
+  /** Get the topology throttler for direct access */
+  get topologyThrottler(): TopologyThrottler | null {
+    return this.topologyThrottlerModule;
+  }
+
+  /** Get the topology throttler for direct access (alias) */
+  get topology(): TopologyThrottler | null {
+    return this.topologyThrottlerModule;
+  }
+
   /** Get the LID resolver for direct access */
   get lidResolver(): LidResolver | null {
     return this.lidResolverModule;
@@ -734,6 +884,16 @@ export class AntiBan {
   /** Get the ban recovery orchestrator for direct access */
   get recoveryOrchestrator(): BanRecoveryOrchestrator {
     return this.banRecovery;
+  }
+
+  /** Get the message type registry for direct access */
+  get messageRegistry(): MessageTypeRegistry | null {
+    return this.messageTypeRegistry;
+  }
+
+  /** Get the JID circuit breaker for direct access (BUG FIX 2) */
+  get circuitBreaker(): JidCircuitBreaker | null {
+    return this.jidCircuitBreakerModule;
   }
 
   /**
@@ -779,6 +939,10 @@ export class AntiBan {
     if (this.logging) {
       console.log('[baileys-antiban] 🔄 Reset — starting fresh warm-up');
     }
+  }
+
+  private isGroupJid(jid: string): boolean {
+    return jid.endsWith('@g.us') || jid.endsWith('@newsletter');
   }
 
   private runAdaptiveCheck(): void {
@@ -833,6 +997,41 @@ export class AntiBan {
   }
 
   /**
+   * Export unified state snapshot for Redis failover or cross-instance migration.
+   * Returns snapshot of all module states (warmup, health, rate limiter, circuits, etc.)
+   */
+  exportState(): AntibanSnapshot {
+    return exportAntibanState({
+      warmup: this.warmUp,
+      health: this.health,
+      rateLimiter: this.rateLimiter,
+      timelockGuard: this.timelockGuard as any,
+      messageRegistry: this.messageTypeRegistry || undefined,
+      topologyThrottler: this.topologyThrottlerModule || undefined,
+      reputationVoucher: this.reputationVoucher || undefined,
+      circuits: this.jidCircuitBreakerModule || undefined, // BUG FIX 2
+      instanceId: (this.resolvedConfig as any).instanceId,
+    });
+  }
+
+  /**
+   * Import unified state snapshot.
+   * CRDT-safe for rate limiters (never overwrites higher counts).
+   */
+  importState(snapshot: AntibanSnapshot): void {
+    importAntibanState(snapshot, {
+      warmup: this.warmUp as any,
+      health: this.health,
+      rateLimiter: this.rateLimiter,
+      timelockGuard: this.timelockGuard,
+      messageRegistry: this.messageTypeRegistry || undefined,
+      topologyThrottler: this.topologyThrottlerModule || undefined,
+      reputationVoucher: this.reputationVoucher || undefined,
+      circuits: this.jidCircuitBreakerModule || undefined, // BUG FIX 2
+    });
+  }
+
+  /**
    * Clean up all timers and resources.
    * Call this when disposing of the AntiBan instance or when the socket closes.
    */
@@ -847,6 +1046,7 @@ export class AntiBan {
     this.jidCanonicalizerModule?.destroy();
     this.lidResolverModule?.destroy();
     this.sessionStabilityMonitor?.reset();
+    this.messageTypeRegistry?.cleanup();
     if (this.logging) {
       console.log('[baileys-antiban] 🧹 Destroyed — all timers cleared');
     }

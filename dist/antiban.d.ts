@@ -21,6 +21,7 @@ import { ReplyRatioGuard, type ReplyRatioConfig, type ReplyRatioStats } from './
 import { ContactGraphWarmer, type ContactGraphConfig, type ContactGraphStats } from './contactGraph.js';
 import { PresenceChoreographer, type PresenceChoreographerConfig, type PresenceChoreographerStats } from './presenceChoreographer.js';
 import { RetryReasonTracker, type RetryTrackerConfig, type RetryStats } from './retryTracker.js';
+import { TopologyThrottler, type TopologyThrottlerConfig } from './topologyThrottler.js';
 import { PostReconnectThrottle, type ReconnectThrottleConfig, type ReconnectThrottleStats } from './reconnectThrottle.js';
 import { LidResolver, type LidResolverConfig, type LidResolverStats } from './lidResolver.js';
 import { JidCanonicalizer, type JidCanonicalizerConfig, type JidCanonicalizerStats } from './jidCanonicalizer.js';
@@ -29,6 +30,10 @@ import { BanRecoveryOrchestrator, type RecoveryStatus } from './banRecoveryOrche
 import { type AntiBanInput, type ResolvedConfig } from './presets.js';
 import { type DeliveryTrackerStats } from './deliveryTracker.js';
 import { type InstanceCoordinatorStats } from './instanceCoordinator.js';
+import { MessageTypeRegistry } from './messageTypeRegistry.js';
+import { type AntibanSnapshot } from './stateExport.js';
+import { ReputationVoucher } from './reputationVoucher.js';
+import { JidCircuitBreaker } from './jidCircuitBreaker.js';
 export interface AntiBanConfigLegacy {
     rateLimiter?: Partial<RateLimiterConfig>;
     warmUp?: Partial<WarmUpConfig>;
@@ -39,6 +44,7 @@ export interface AntiBanConfigLegacy {
     presence?: Partial<PresenceChoreographerConfig>;
     retryTracker?: Partial<RetryTrackerConfig>;
     reconnectThrottle?: Partial<ReconnectThrottleConfig>;
+    topologyThrottler?: Partial<TopologyThrottlerConfig>;
     lidResolver?: LidResolverConfig;
     jidCanonicalizer?: JidCanonicalizerConfig;
     sessionStability?: {
@@ -70,12 +76,26 @@ export interface AntiBanStats {
     presence?: PresenceChoreographerStats;
     retryTracker?: RetryStats | null;
     reconnectThrottle?: ReconnectThrottleStats | null;
+    topologyThrottler?: {
+        newContactsThisHour: number;
+        newContactsToday: number;
+        replyRatio: number | null;
+        blockedRatio: number | null;
+        hotspots: Array<{
+            sourceGroup: string;
+            count: number;
+        }>;
+    } | null;
     lidResolver?: LidResolverStats | null;
     jidCanonicalizer?: JidCanonicalizerStats | null;
     sessionStability?: SessionHealthStats | null;
     banRecovery?: RecoveryStatus | null;
     deliveryTracker: DeliveryTrackerStats;
     instanceCoordinator?: InstanceCoordinatorStats | null;
+    messageRegistry?: {
+        typeCount: number;
+        warningCount: number;
+    } | null;
 }
 export declare class AntiBan {
     private rateLimiter;
@@ -87,15 +107,21 @@ export declare class AntiBan {
     private presenceChoreographer;
     private retryTrackerModule;
     private reconnectThrottleModule;
+    private topologyThrottlerModule;
     private lidResolverModule;
     private jidCanonicalizerModule;
     private sessionStabilityMonitor;
     private banRecovery;
     private deliveryTracker;
     private instanceCoordinator;
+    private messageTypeRegistry;
+    private jidCircuitBreakerModule;
     private stateManager;
     private resolvedConfig;
     private logging;
+    private hasDisconnected;
+    /** Optional reputation voucher (standalone — caller manages separate voucher sockets) */
+    reputationVoucher?: ReputationVoucher;
     private stats;
     constructor(input?: AntiBanInput | AntiBanConfigLegacy, warmUpStateArg?: WarmUpState);
     /**
@@ -153,6 +179,10 @@ export declare class AntiBan {
     get retryTracker(): RetryReasonTracker;
     /** Get the reconnect throttle for direct access */
     get reconnectThrottle(): PostReconnectThrottle;
+    /** Get the topology throttler for direct access */
+    get topologyThrottler(): TopologyThrottler | null;
+    /** Get the topology throttler for direct access (alias) */
+    get topology(): TopologyThrottler | null;
     /** Get the LID resolver for direct access */
     get lidResolver(): LidResolver | null;
     /** Get the JID canonicalizer for direct access */
@@ -161,6 +191,10 @@ export declare class AntiBan {
     get sessionStability(): SessionHealthMonitor | null;
     /** Get the ban recovery orchestrator for direct access */
     get recoveryOrchestrator(): BanRecoveryOrchestrator;
+    /** Get the message type registry for direct access */
+    get messageRegistry(): MessageTypeRegistry | null;
+    /** Get the JID circuit breaker for direct access (BUG FIX 2) */
+    get circuitBreaker(): JidCircuitBreaker | null;
     /**
      * Export warm-up state for persistence between restarts
      */
@@ -177,9 +211,20 @@ export declare class AntiBan {
      * Reset everything (use after a ban period)
      */
     reset(): void;
+    private isGroupJid;
     private runAdaptiveCheck;
     private persistStateDebounced;
     private persistStateImmediate;
+    /**
+     * Export unified state snapshot for Redis failover or cross-instance migration.
+     * Returns snapshot of all module states (warmup, health, rate limiter, circuits, etc.)
+     */
+    exportState(): AntibanSnapshot;
+    /**
+     * Import unified state snapshot.
+     * CRDT-safe for rate limiters (never overwrites higher counts).
+     */
+    importState(snapshot: AntibanSnapshot): void;
     /**
      * Clean up all timers and resources.
      * Call this when disposing of the AntiBan instance or when the socket closes.

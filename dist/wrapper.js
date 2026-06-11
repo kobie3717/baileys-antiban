@@ -89,10 +89,24 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                     antiban.destroy(); // Clean up all timers
                     deafDetector?.onDisconnect();
                     deafDetector?.destroy();
+                    // Fleet event: detect ban-like disconnect codes
+                    if (options.fleetEventStore) {
+                        const banCodes = [401, 403, 428, 515]; // 401=logged out, 403=forbidden, 428=banned, 515=restart required
+                        if (typeof reason === 'number' && banCodes.includes(reason)) {
+                            void options.fleetEventStore.emit('ban', { statusCode: reason });
+                        }
+                    }
                 }
                 if (update.connection === 'open') {
                     antiban.onReconnect();
                     deafDetector?.onConnect();
+                    // Fleet event: recovery from previous ban/warn
+                    if (options.fleetEventStore) {
+                        const health = antiban.getStats().health;
+                        if (health.risk === 'low') {
+                            void options.fleetEventStore.emit('recovery', { risk: health.risk });
+                        }
+                    }
                 }
                 // Reachout timelock detection
                 if (update.reachoutTimeLock) {
@@ -101,6 +115,13 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                         timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
                         enforcementType: update.reachoutTimeLock.enforcementType,
                     });
+                    // Fleet event: timelock
+                    if (options.fleetEventStore && update.reachoutTimeLock.isActive) {
+                        void options.fleetEventStore.emit('timelock', {
+                            enforcementType: update.reachoutTimeLock.enforcementType,
+                            endsAt: update.reachoutTimeLock.timeEnforcementEnds,
+                        });
+                    }
                 }
             }
             // Catch 463 errors from message updates + track retries + learn LID mappings
@@ -115,6 +136,10 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                             : [];
                         if (params.includes(463) || params.includes('463')) {
                             antiban.timelock.record463Error();
+                            // Fleet event: rate limit detected
+                            if (options.fleetEventStore) {
+                                void options.fleetEventStore.emit('rate_limit', { error: '463' });
+                            }
                         }
                     }
                     // Retry tracking
@@ -180,10 +205,24 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                 antiban.destroy(); // Clean up all timers
                 deafDetector?.onDisconnect();
                 deafDetector?.destroy();
+                // Fleet event: detect ban-like disconnect codes
+                if (options.fleetEventStore) {
+                    const banCodes = [401, 403, 428, 515]; // 401=logged out, 403=forbidden, 428=banned, 515=restart required
+                    if (typeof reason === 'number' && banCodes.includes(reason)) {
+                        void options.fleetEventStore.emit('ban', { statusCode: reason });
+                    }
+                }
             }
             if (update.connection === 'open') {
                 antiban.onReconnect();
                 deafDetector?.onConnect();
+                // Fleet event: recovery from previous ban/warn
+                if (options.fleetEventStore) {
+                    const health = antiban.getStats().health;
+                    if (health.risk === 'low') {
+                        void options.fleetEventStore.emit('recovery', { risk: health.risk });
+                    }
+                }
             }
             // Reachout timelock detection
             if (update.reachoutTimeLock) {
@@ -192,6 +231,13 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                     timeEnforcementEnds: update.reachoutTimeLock.timeEnforcementEnds,
                     enforcementType: update.reachoutTimeLock.enforcementType,
                 });
+                // Fleet event: timelock
+                if (options.fleetEventStore && update.reachoutTimeLock.isActive) {
+                    void options.fleetEventStore.emit('timelock', {
+                        enforcementType: update.reachoutTimeLock.enforcementType,
+                        endsAt: update.reachoutTimeLock.timeEnforcementEnds,
+                    });
+                }
             }
         });
         // Catch 463 errors from message updates + track retries + learn LID mappings
@@ -203,6 +249,10 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                     const params = update.update.messageStubParameters;
                     if (params.includes(463) || params.includes('463')) {
                         antiban.timelock.record463Error();
+                        // Fleet event: rate limit detected
+                        if (options.fleetEventStore) {
+                            void options.fleetEventStore.emit('rate_limit', { error: '463' });
+                        }
                     }
                 }
                 // Retry tracking
@@ -286,13 +336,27 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
         // Chain this send onto the previous — each waits for the prior send's
         // afterSend to commit before running its own beforeSend check.
         const sendResult = sendLock.then(async () => {
+            // Circuit breaker check (before antiban.beforeSend)
+            if (options.circuitBreaker) {
+                if (!options.circuitBreaker.canSend(canonicalJid)) {
+                    throw new Error('[baileys-antiban] circuit-breaker: send blocked for ' + canonicalJid);
+                }
+            }
             const decision = await antiban.beforeSend(canonicalJid, text);
             if (!decision.allowed) {
                 throw new Error(`[baileys-antiban] Message blocked: ${decision.reason}`);
             }
-            // Apply delay
+            // Apply delay from rate limiter
             if (decision.delayMs > 0) {
                 await new Promise(resolve => setTimeout(resolve, decision.delayMs));
+            }
+            // Apply circuit breaker jitter for broadcast messages
+            if (options.circuitBreaker) {
+                const isBroadcast = canonicalJid.endsWith('@broadcast') || canonicalJid.endsWith('@newsletter');
+                const jitter = options.circuitBreaker.getJitter(isBroadcast);
+                if (jitter > 0) {
+                    await new Promise(resolve => setTimeout(resolve, jitter));
+                }
             }
             // Send message (using canonical JID)
             // If typo injection is active, send typo first, then correction
@@ -320,9 +384,17 @@ export function wrapSocket(sock, config, warmUpState, wrapOptions) {
                 if (msgId) {
                     antiban.retryTracker.clear(msgId);
                 }
+                // Circuit breaker success
+                if (options.circuitBreaker) {
+                    options.circuitBreaker.recordSuccess(canonicalJid);
+                }
                 return result;
             }
             catch (error) {
+                // Circuit breaker failure
+                if (options.circuitBreaker) {
+                    options.circuitBreaker.recordFailure(canonicalJid);
+                }
                 // Baileys PR #2587: partial-encrypt Boom now carries structured data:
                 //   error.data.failed[]   — per-recipient { jid, error } failures
                 //   error.data.firstCause — most likely root cause string

@@ -67,5 +67,11 @@ export { InstanceCoordinator } from './instanceCoordinator.js';
 export { JidCircuitBreaker, createJidCircuitBreaker } from './jidCircuitBreaker.js';
 export { createFleetEventStore, createMySQLEventStoreBackend, createInMemoryEventStoreBackend } from './fleetEventStore.js';
 export { HumanEntropyService, createHumanEntropyService } from './humanEntropy.js';
+// v4.8 new modules
+export { MessageTypeRegistry } from './messageTypeRegistry.js';
+export { exportAntibanState, importAntibanState } from './stateExport.js';
+export { TopologyThrottler } from './topologyThrottler.js';
+// v4.9 new modules
+export { ReputationVoucher } from './reputationVoucher.js';
 // Observability
 export { createConsoleLogger, exportPrometheusMetrics, createMetricsHandler, createPeriodicExporter, } from './observability.js';

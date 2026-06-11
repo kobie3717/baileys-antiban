@@ -10,7 +10,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRetryJitter = exports.getTypingJitter = exports.getMessageSendJitter = exports.applySessionFingerprint = exports.generateSessionFingerprint = exports.proxyRotator = exports.readReceiptVariance = exports.credsSnapshot = exports.applyFingerprint = exports.generateFingerprint = exports.messageRecovery = exports.applyGroupMultiplier = exports.shouldUseGroupProfile = exports.isBroadcast = exports.isNewsletter = exports.isGroup = exports.StateManager = exports.PRESETS = exports.resolveConfig = exports.FileStateAdapter = exports.Scheduler = exports.WebhookAlerts = exports.ContentVariator = exports.MessageQueue = exports.wrapSocketWithFingerprint = exports.wrapSocket = exports.getRetryReasonDescription = exports.isMacError = exports.parseRetryReason = exports.MAC_ERROR_CODES = exports.MessageRetryReason = exports.createLidFirstResolver = exports.LidFirstResolver = exports.DeafSessionDetector = exports.classifyDisconnect = exports.wrapWithSessionStability = exports.SessionHealthMonitor = exports.JidCanonicalizer = exports.LidResolver = exports.PostReconnectThrottle = exports.RetryReasonTracker = exports.getCircadianMultiplier = exports.PresenceChoreographer = exports.ContactGraphWarmer = exports.ReplyRatioGuard = exports.TimelockGuard = exports.HealthMonitor = exports.WarmUp = exports.RateLimiter = exports.AntiBan = void 0;
-exports.createPeriodicExporter = exports.createMetricsHandler = exports.exportPrometheusMetrics = exports.createConsoleLogger = exports.createHumanEntropyService = exports.HumanEntropyService = exports.createInMemoryEventStoreBackend = exports.createMySQLEventStoreBackend = exports.createFleetEventStore = exports.createJidCircuitBreaker = exports.JidCircuitBreaker = exports.InstanceCoordinator = exports.DeliveryTracker = exports.BanRecoveryOrchestrator = exports.LegitimacySignalInjector = exports.GROUP_OP_ERRORS = exports.extractPrivacyBlock = exports.classifyGroupOpError = exports.GroupOperationGuard = exports.AbortError = exports.STEALTH_BROWSER_POOL = exports.rampPresenceAfterConnect = exports.getStealthSocketConfig = exports.createStealthFingerprint = exports.getBatteryState = exports.getVoiceNoteMetadata = void 0;
+exports.createPeriodicExporter = exports.createMetricsHandler = exports.exportPrometheusMetrics = exports.createConsoleLogger = exports.ReputationVoucher = exports.TopologyThrottler = exports.importAntibanState = exports.exportAntibanState = exports.MessageTypeRegistry = exports.createHumanEntropyService = exports.HumanEntropyService = exports.createInMemoryEventStoreBackend = exports.createMySQLEventStoreBackend = exports.createFleetEventStore = exports.createJidCircuitBreaker = exports.JidCircuitBreaker = exports.InstanceCoordinator = exports.DeliveryTracker = exports.BanRecoveryOrchestrator = exports.LegitimacySignalInjector = exports.GROUP_OP_ERRORS = exports.extractPrivacyBlock = exports.classifyGroupOpError = exports.GroupOperationGuard = exports.AbortError = exports.STEALTH_BROWSER_POOL = exports.rampPresenceAfterConnect = exports.getStealthSocketConfig = exports.createStealthFingerprint = exports.getBatteryState = exports.getVoiceNoteMetadata = void 0;
 // Core
 var antiban_js_1 = require("./antiban.js");
 Object.defineProperty(exports, "AntiBan", { enumerable: true, get: function () { return antiban_js_1.AntiBan; } });
@@ -143,6 +143,17 @@ Object.defineProperty(exports, "createInMemoryEventStoreBackend", { enumerable: 
 var humanEntropy_js_1 = require("./humanEntropy.js");
 Object.defineProperty(exports, "HumanEntropyService", { enumerable: true, get: function () { return humanEntropy_js_1.HumanEntropyService; } });
 Object.defineProperty(exports, "createHumanEntropyService", { enumerable: true, get: function () { return humanEntropy_js_1.createHumanEntropyService; } });
+// v4.8 new modules
+var messageTypeRegistry_js_1 = require("./messageTypeRegistry.js");
+Object.defineProperty(exports, "MessageTypeRegistry", { enumerable: true, get: function () { return messageTypeRegistry_js_1.MessageTypeRegistry; } });
+var stateExport_js_1 = require("./stateExport.js");
+Object.defineProperty(exports, "exportAntibanState", { enumerable: true, get: function () { return stateExport_js_1.exportAntibanState; } });
+Object.defineProperty(exports, "importAntibanState", { enumerable: true, get: function () { return stateExport_js_1.importAntibanState; } });
+var topologyThrottler_js_1 = require("./topologyThrottler.js");
+Object.defineProperty(exports, "TopologyThrottler", { enumerable: true, get: function () { return topologyThrottler_js_1.TopologyThrottler; } });
+// v4.9 new modules
+var reputationVoucher_js_1 = require("./reputationVoucher.js");
+Object.defineProperty(exports, "ReputationVoucher", { enumerable: true, get: function () { return reputationVoucher_js_1.ReputationVoucher; } });
 // Observability
 var observability_js_1 = require("./observability.js");
 Object.defineProperty(exports, "createConsoleLogger", { enumerable: true, get: function () { return observability_js_1.createConsoleLogger; } });

@@ -57,4 +57,13 @@ export declare class InstanceCoordinator {
      * Write coordination state to file atomically using rename-swap
      */
     private writeState;
+    /**
+     * BUG FIX 3: Sync local rate limiter with shared pool after reconnect
+     * Reads shared pool timestamps and injects them into the local limiter's sliding window.
+     * This prevents the double-spend window where the limiter thinks it has full budget
+     * post-reconnect but the shared pool already shows most slots used.
+     */
+    syncLocalLimiter(rateLimiter: {
+        injectTimestamps: (timestamps: number[]) => void;
+    }): void;
 }

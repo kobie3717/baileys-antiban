@@ -191,6 +191,36 @@ class RateLimiter {
             this.knownChats.add(jid);
         }
     }
+    /**
+     * BUG FIX 3: Inject historical timestamps into the sliding window
+     * Used by InstanceCoordinator to sync local limiter with shared pool after reconnect.
+     * This prevents the double-spend window where local limiter thinks it has full budget
+     * but the shared pool already shows most slots used.
+     */
+    injectTimestamps(timestamps) {
+        const now = Date.now();
+        // Filter to last 24 hours only (our cleanup window)
+        const recentTimestamps = timestamps.filter(ts => now - ts < TIME_CONSTANTS.MS_PER_DAY);
+        // Merge with existing messages, avoiding duplicates by timestamp
+        const existingTimes = new Set(this.messages.map(m => m.timestamp));
+        for (const ts of recentTimestamps) {
+            if (!existingTimes.has(ts)) {
+                // Create synthetic message record with placeholder data
+                this.messages.push({
+                    timestamp: ts,
+                    recipient: '__injected__', // placeholder - we don't know the actual recipient
+                    contentHash: '__injected__', // placeholder - we don't know the content
+                });
+            }
+        }
+        // Update lastMessageTime if injected timestamps are more recent
+        const maxInjected = Math.max(...recentTimestamps, 0);
+        if (maxInjected > this.lastMessageTime) {
+            this.lastMessageTime = maxInjected;
+        }
+        // Sort messages by timestamp to maintain sliding window integrity
+        this.messages.sort((a, b) => a.timestamp - b.timestamp);
+    }
     cleanup(now) {
         // Remove messages older than 24 hours
         this.messages = this.messages.filter(m => now - m.timestamp < TIME_CONSTANTS.MS_PER_DAY);

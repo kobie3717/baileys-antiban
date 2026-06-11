@@ -32,6 +32,8 @@ import { type DeafSessionConfig } from './sessionStability.js';
 import type { WarmUpState } from './warmup.js';
 import { type GroupOperationGuardConfig } from './groupOperationGuard.js';
 import { type LegitimacySignalInjectorConfig } from './legitimacySignalInjector.js';
+import { JidCircuitBreaker } from './jidCircuitBreaker.js';
+import type { FleetEventStoreHandle } from './fleetEventStore.js';
 export type WASocket = {
     sendMessage: (jid: string, content: any, options?: any) => Promise<any>;
     groupParticipantsUpdate?: (jid: string, participants: string[], action: string) => Promise<any>;
@@ -70,6 +72,16 @@ export interface WrapSocketOptions {
      * Default: enabled with recommended settings.
      */
     legitimacySignals?: LegitimacySignalInjectorConfig | false;
+    /**
+     * Per-JID circuit breaker for send protection.
+     * Blocks sends to problematic recipients after threshold failures.
+     */
+    circuitBreaker?: JidCircuitBreaker;
+    /**
+     * Fleet event store for multi-instance coordination.
+     * Emit/poll ban/warn/recovery events across instances.
+     */
+    fleetEventStore?: FleetEventStoreHandle;
 }
 export type WrappedSocket<T extends WASocket = WASocket> = T & {
     antiban: AntiBan;

@@ -188,6 +188,118 @@ Stats: `entropy.getStats()` returns `{ typingActions, readActions, presenceActio
 
 ---
 
+## v4.8-4.10: State Export, Message Registry, Topology & Vouching
+
+### Unified State Export (v4.8)
+
+Single-call serialization for Redis failover:
+
+```typescript
+// Export everything
+const state = antiban.exportState();
+await redis.set('antiban:state', JSON.stringify(state));
+
+// Restore on new instance
+const saved = JSON.parse(await redis.get('antiban:state'));
+antiban.importState(saved);
+```
+
+Covers: warmup, health, rate limits, circuit breakers, timelockGuard, message registry, engagement scores. CRDT-safe — safe for concurrent instances.
+
+### Message Type Registry (v4.8)
+
+Register message types with priority and provenance requirements:
+
+```typescript
+import { MessageTypeRegistry } from 'baileys-antiban';
+
+const registry = new MessageTypeRegistry();
+
+registry.registerMessageType('bid_confirmation', {
+  priority: 'critical',
+  rateLimitPool: 'bid_confirmations',
+  requiresProvenance: ['user_action_id'],
+  legitimacySignals: { maxActionDeltaMs: 2000 }
+});
+
+registry.registerMessageType('lot_announcement', {
+  priority: 'bulk',
+  rateLimitPool: 'broadcasts',
+  legitimacySignals: { minSubscriptionAgeDays: 7 }
+});
+
+// Send with provenance
+await registry.send(sock, jid, { text: 'You were outbid!' }, {
+  type: 'bid_confirmation',
+  provenance: {
+    trigger: 'user_action',
+    user_action_id: 'bid_892',
+    action_timestamp: Date.now()
+  }
+});
+
+// Check warnings (never autopilot throttles)
+const warnings = registry.getWarnings();
+```
+
+### Topology Throttler (v4.9)
+
+Replace timing mimicry with graph-expansion enforcement:
+
+```typescript
+import { TopologyThrottler } from 'baileys-antiban';
+
+const topology = new TopologyThrottler({
+  maxNewContactsPerHour: 5,
+  maxNewContactsPerDay: 20,
+  minReplyRatioForNewContacts: 0.3,
+  maxSameGroupContacts: 10
+});
+
+// Assess before sending to unknown contact
+const assessment = topology.assessContact(jid, {
+  messageType: 'dm',
+  hasReplied: false,
+  lastContactAt: undefined
+});
+// { risk: 'HIGH', score: 75, recommendation: 'delay' }
+
+// Record outcomes
+topology.recordReplied(jid);
+topology.recordBlocked(jid);
+```
+
+### Reputation Voucher (v4.10)
+
+Warm up new numbers using established accounts:
+
+```typescript
+import { ReputationVoucher } from 'baileys-antiban';
+
+const voucher = new ReputationVoucher({ maxVouchesPerWeek: 5 });
+
+// Register a trusted account (6+ months old)
+voucher.registerVoucher({
+  jid: 'trusted@s.whatsapp.net',
+  trustScore: 85,
+  accountAgeDays: 240
+});
+
+// Queue new number, record qualifying events
+voucher.queueTarget({ jid: 'new@s.whatsapp.net' });
+voucher.recordQualifyingEvent('new@s.whatsapp.net'); // × 3
+
+// Plan the vouch conversation (you execute the sends)
+const availableVoucher = voucher.getAvailableVoucher();
+const convo = voucher.planVouchConversation(availableVoucher.jid, 'new@s.whatsapp.net');
+// convo.messages → array of natural warmup messages to send
+
+voucher.recordVouchOutcome('new@s.whatsapp.net', true); // replied ✓
+const credit = voucher.calculateWarmupCredit('new@s.whatsapp.net'); // 1-3 days
+```
+
+---
+
 ## v2.0 New Features — Session Stability Module
 
 ### What's New in v2.0
